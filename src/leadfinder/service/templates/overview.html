@@ -12,7 +12,7 @@
 .ov-sec>h2 .info-box{right:auto;width:560px;max-width:calc(100vw - 32px)}
 .ov-top{min-width:720px}
 .ov-top td{padding:12px 16px 12px 0}.ov-top td:last-child{padding-right:0}
-.ov-top th.r,.ov-top td.r{padding-right:20px;width:72px}
+.ov-top th.r,.ov-top td.r{padding-right:20px;width:84px}
 .ov-lead{font-weight:600}
 .ov-sub{display:block;font-size:14px;line-height:20px;color:var(--muted)}
 .ov-why{font-size:14px;line-height:20px}
@@ -27,7 +27,7 @@
 <header class="ov-head">
   <p class="kicker">Overview · {{ now|when }} UTC<sup class="fn"><a href="#fn-data" aria-label="footnote 1">1</a></sup></p>
   <h1 class="title">{{ counts.new }} lead{{ 's' if counts.new != 1 }} waiting for review{% if counts.new %}, {{ hot }} of them hot{% endif %}</h1>
-  <p class="muted">Independent practices, scored from their NPI-style record and their visits to the site · nothing is sent until an SDR approves the draft</p>
+  <p class="muted">Independent practices, ranked by a model trained on their NPI-style record and their visits to the site · nothing is sent until an SDR approves the draft</p>
 </header>
 
 <hr class="rule">
@@ -48,15 +48,16 @@
 </section>
 
 <section class="ov-sec">
-  <h2 id="ov-top" class="kicker">Top of the list · the best leads not yet decided{% call note('order-note', 'How this order is made') %}<span class="ln">By score, highest first. The score is a points table: specialty, number of providers, EHR, the pages visited and how recently<sup class="fn"><a href="#fn-score" aria-label="footnote 2">2</a></sup>.</span><span class="ln">Each lead's page shows every point and where it came from.</span>{% endcall %}</h2>
+  <h2 id="ov-top" class="kicker">Top of the list · the best leads not yet decided{% call note('order-note', 'How this order is made') %}<span class="ln">By the model's chance of converting, highest first: a logistic regression over specialty, number of providers, EHR, the pages visited and how recently<sup class="fn"><a href="#fn-score" aria-label="footnote 2">2</a></sup>.</span><span class="ln">Hot is the top fifth of the leads it was trained on, warm the next three tenths. Each lead's page shows what moved its chance, and the points table's view beside it.</span>{% endcall %}</h2>
   {% if top %}
   <div class="scroll">
     <table class="ov-top">
-      <thead><tr><th scope="col" class="r">Score</th><th scope="col">Practice</th><th scope="col">Strongest reason</th><th scope="col">Band</th></tr></thead>
+      <thead><tr><th scope="col" class="r">Chance</th><th scope="col">Practice</th><th scope="col">Strongest reason</th><th scope="col" class="r">Points</th><th scope="col">Band</th></tr></thead>
       <tbody>{% for l in top %}<tr>
-        <td class="r num serif" style="font-size:22px">{{ l.score }}</td>
+        <td class="r num serif" style="font-size:22px">{% if l.chance is not none %}{{ (l.chance * 100)|round|int }}%{% else %}{{ l.score }}{% endif %}</td>
         <td><a class="ov-lead" href="/lead/{{ l.id }}">{{ l.name }}</a><span class="ov-sub">{{ l.specialty }} · {{ l.providers }} provider{{ 's' if l.providers != 1 }} · {{ l.city }}, {{ l.state }}</span></td>
-        <td class="ov-why">{{ l.reasons[0].label }} <span class="muted">(+{{ l.reasons[0].points }})</span></td>
+        <td class="ov-why">{{ l.why }}</td>
+        <td class="r num muted">{{ l.score }}</td>
         <td><span class="badge {{ l.band }}">{{ l.band }}</span></td>
       </tr>{% endfor %}</tbody>
     </table>
@@ -72,8 +73,8 @@
   <ol class="stages">
     <li><div><b>Visit analysis</b><span class="small muted">Website visits tied to a practice: which pages, how often, how lately.</span></div><span class="num">{{ stages.visits }} visits</span></li>
     <li><div><b>Enrichment</b><span class="small muted">The practice's NPI-style record: specialty, providers, location, EHR.</span></div><span class="num">{{ stages.practices }} practices</span></li>
-    <li><div><b>Scoring</b><span class="small muted">A transparent points table, every point with its reason and source.</span></div><span class="num">{{ stages.scored }} scored</span></li>
-    <li><div><b>Outreach draft</b><span class="small muted">A first email from public business facts only, checked by the guardrail.</span></div><span class="num">{{ stages.scored }} drafted</span></li>
+    <li><div><b>Scoring</b><span class="small muted">A trained model gives each practice a chance of converting, every push up or down with its reason and source; the points table stays beside it.</span></div><span class="num">{{ stages.scored }} scored</span></li>
+    <li><div><b>Outreach draft and call brief</b><span class="small muted">A first email and a brief for the call, from public business facts only{{ ', written by Claude on request' if writer.is_model else '' }} and checked by code.</span></div><span class="num">{{ stages.scored }} drafted</span></li>
     <li><div><b>SDR approval</b><span class="small muted">A person approves, edits or rejects; every decision is logged.</span></div><span class="num">{{ counts.approved + counts.rejected }} decided</span></li>
   </ol>
 </section>
@@ -81,7 +82,7 @@
 <footer class="footnote">
   <ol class="fnotes">
     <li id="fn-data">Synthetic data: the practices, people and visits are made up, and each NPI is a random number with a valid check digit, not a real provider's. Times are the server's clock, UTC.</li>
-    <li id="fn-score">The weights are a starting table, set by hand. SDR rejections are meant to move them, and a trained model is to be benchmarked against them and against an LLM's judgment.</li>
+    <li id="fn-score">The model learned from a simulated history, because there are no real outcomes yet. Its percentages rank leads against each other; they are not a forecast of real conversion. <a href="/model">How it was trained and how it compares with the points table</a>.</li>
   </ol>
 </footer>
 {% endblock %}

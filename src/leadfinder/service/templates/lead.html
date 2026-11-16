@@ -20,6 +20,15 @@
 .draft textarea{min-height:360px;resize:vertical;font-size:15px;line-height:24px}
 .reject{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;max-width:760px}
 .reject .field{flex:1 1 220px}
+.byline{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;max-width:760px}
+.byline p{margin:0;flex:1 1 280px}
+.brief{display:flex;flex-direction:column;gap:20px;max-width:760px}
+.brief p{margin:0}
+.brief h3{font:600 15px/24px var(--body);margin:0 0 4px}
+.brief ol,.brief ul{margin:0;padding-left:1.4em}.brief li+li{margin-top:6px}
+.brief dl{margin:0;display:flex;flex-direction:column;gap:10px}
+.brief dt{font-style:italic}.brief dd{margin:0;color:var(--muted)}
+.opener{font-family:var(--heading);font-size:24px;line-height:32px;font-weight:500}
 .history{list-style:none;margin:0;padding:0}
 .history li{padding:10px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:2px}
 {% endblock %}
@@ -27,21 +36,41 @@
 <header class="head">
   <nav aria-label="Breadcrumb"><p class="kicker"><a href="/leads">Leads</a> / Lead #{{ d.id }}</p></nav>
   <h1 class="title">{{ d.name }}</h1>
-  <p class="muted">{{ d.specialty }} · {{ d.providers }} provider{{ 's' if d.providers != 1 }} · {{ d.city }}, {{ d.state }} · {% if d.status == 'new' %}<span class="badge {{ d.band }}">{{ d.band }}</span>{% else %}<span class="badge {{ d.status }}">{{ d.status }}</span>{% endif %}</p>
+  <p class="muted">{{ d.specialty }} · {{ d.providers }} provider{{ 's' if d.providers != 1 }} · {{ d.city }}, {{ d.state }} · {% if d.status == 'new' %}<span class="badge {{ d.shown_band }}">{{ d.shown_band }}</span>{% else %}<span class="badge {{ d.status }}">{{ d.status }}</span>{% endif %}</p>
 </header>
 
 {% if stale %}<p class="notice warn" role="alert"><b>Not saved.</b> Someone decided this lead while you had it open; what they did is below.</p>{% endif %}
 {% if done == 'approved' %}<p class="notice" role="status"><b>Approved.</b> The email is marked ready to send and the decision is in the audit log. Nothing was sent from here.</p>{% endif %}
 {% if done == 'rejected' %}<p class="notice" role="status"><b>Rejected.</b> The reason is in the audit log, where it counts against the weights that put this lead up.</p>{% endif %}
+{% if wrote %}<p class="notice" role="status"><b>{{ 'Written by Claude.' if writer.is_model else 'Written.' }}</b> The {{ 'email' if wrote == 'email' else 'call brief' }} below is new{% if writer.is_model %}; it passed the checks, and it is still yours to read before you use it{% endif %}.</p>{% endif %}
+{% if write_error %}<p class="notice warn" role="alert"><b>Not written.</b> {{ write_error }}</p>{% endif %}
 {% if blocked %}<p class="notice warn" role="alert"><b>Not approved.</b> The guardrail stopped this draft: {{ problems|join('; ') }}.</p>{% endif %}
 
 <hr class="rule">
 
 <div class="cols">
   <div class="main">
+    {% if d.chance is not none %}
     <section class="sec">
-      <h2 id="ld-score" class="kicker">Why it scored {{ d.score }} · every point and its source{% call note('score-note', 'How the score is made') %}<span class="ln">A points table: each line adds what it says, and the total is capped at 100.</span><span class="ln">Source "NPI record" is the practice's registry-style facts; "site visits" is the visit log. Nothing else enters the score.</span>{% endcall %}</h2>
-      <div class="scoreline"><span class="big num">{{ d.score }}</span><span class="muted">of 100 · {{ d.band }}{% if d.band == 'hot' %}, 70 or more{% elif d.band == 'warm' %}, 45 to 69{% else %}, under 45{% endif %}</span></div>
+      <h2 id="ld-chance" class="kicker">Chance of converting · what moved it{% call note('chance-note', 'How the chance is made') %}<span class="ln">A logistic regression trained on a simulated history<sup class="fn"><a href="#fn-sim" aria-label="footnote 2">2</a></sup>. Each line is one fact about this practice and how far it moved the chance up or down from the average lead's; the lines add up to the prediction exactly.</span><span class="ln">A fact that is absent counts too: no visit to the demo page lowers the chance a little, because the average lead has some.</span>{% endcall %}</h2>
+      <div class="scoreline"><span class="big num">{{ (d.chance * 100)|round|int }}%</span><span class="muted">{{ d.chance_band }}{% if model %} · {{ 'the top fifth of leads' if d.chance_band == 'hot' else ('the next three tenths' if d.chance_band == 'warm' else 'the lower half') }}{% endif %} · model {{ d.model_version }}</span></div>
+      {% set widest = (d.chance_reasons|map(attribute='effect')|map('abs')|max) if d.chance_reasons else 1 %}
+      <div class="drivers" role="table" aria-label="What moved the chance">
+        <div role="row" style="display:contents"><span class="hd" role="columnheader">Fact</span><span class="hd" role="columnheader">Source</span><span class="hd" role="columnheader">Effect</span></div>
+        {% for r in d.chance_reasons %}
+        <div role="row" style="display:contents">
+          <span role="cell">{{ r.label }}</span>
+          <span role="cell" class="small muted">{{ r.source }}</span>
+          <span role="cell" class="barcell"><svg width="136" height="10" role="img" aria-label="{{ 'raises' if r.effect > 0 else 'lowers' }} the chance"><rect class="bar-track" x="0" y="3" width="84" height="4" rx="2"/><rect class="{{ 'bar-good' if r.effect > 0 else 'bar-worse' }}" x="0" y="3" width="{{ [(r.effect|abs / widest * 84)|round|int, 2]|max }}" height="4" rx="2"/><text x="92" y="9" font-size="11" fill="currentColor">{{ 'raises' if r.effect > 0 else 'lowers' }}</text></svg></span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="sec">
+      <h2 id="ld-score" class="kicker">The points table says {{ d.score }} · every point and its source{% call note('score-note', 'How the score is made') %}<span class="ln">A points table: each line adds what it says, and the total is capped at 100.</span><span class="ln">Source "NPI record" is the practice's registry-style facts; "site visits" is the visit log. Nothing else enters the score.</span>{% endcall %}</h2>
+      <div class="scoreline"><span class="mid num">{{ d.score }}</span><span class="muted">of 100 · {{ d.points_band }}{% if d.points_band == 'hot' %}, 70 or more{% elif d.points_band == 'warm' %}, 45 to 69{% else %}, under 45{% endif %} · the hand-set table, kept beside the model for comparison</span></div>
       <div class="drivers" role="table" aria-label="Score breakdown">
         <div role="row" style="display:contents"><span class="hd" role="columnheader">Reason</span><span class="hd" role="columnheader">Source</span><span class="hd" role="columnheader">Points</span></div>
         {% for r in d.reasons %}
@@ -55,8 +84,13 @@
     </section>
 
     <section class="sec">
-      <h2 id="ld-draft" class="kicker">The first email · {{ 'approved' if d.status == 'approved' else ('not sent: rejected' if d.status == 'rejected' else 'drafted, waiting for you') }}{% call note('draft-note', 'What the guardrail checks') %}<span class="ln">Before an approval lands, the words are checked: no patient information, no claims the seller cannot back (a guarantee, "HIPAA certified"), and the footer with the postal address and the opt-out still there (CAN-SPAM).</span><span class="ln">It goes to the practice's business address only.</span>{% endcall %}</h2>
+      <h2 id="ld-draft" class="kicker">The first email · {{ 'approved' if d.status == 'approved' else ('not sent: rejected' if d.status == 'rejected' else 'drafted, waiting for you') }}{% call note('draft-note', 'What the guardrail checks') %}<span class="ln">Before an approval lands, the words are checked: no patient information, no claims the seller cannot back (a guarantee, "HIPAA certified"), and the footer with the postal address and the opt-out still there (CAN-SPAM).</span><span class="ln">It goes to the practice's business address only.</span><span class="ln">{% if writer.is_model %}Claude sees the practice's public record, its visits and the score's reasons, nothing else. Its draft is kept only if it passes the same checks and names no EHR or provider count that is not on the record; the footer is added by code.{% else %}No Claude credential is set, so drafts come from the template. Set ANTHROPIC_API_KEY and restart to have Claude write them.{% endif %}</span>{% endcall %}</h2>
       {% if d.status == 'new' and can.act_on_leads %}
+      <form class="byline" method="post" action="/lead/{{ d.id }}/write">
+        <input type="hidden" name="what" value="email">
+        <p class="small muted">Written by {{ 'Claude' if d.written_by == 'claude' else 'the template' }}.</p>
+        {% if writer.is_model %}<button class="btn" type="submit" data-busy="Claude is writing…">{{ 'Have Claude write it again' if d.written_by == 'claude' else 'Have Claude write it' }}</button>{% endif %}
+      </form>
       <form class="draft" method="post" action="/lead/{{ d.id }}/approve">
         <input type="hidden" name="seen" value="{{ token }}">
         <p class="small muted">To {{ d.contact_name }} &lt;{{ d.contact_email }}&gt;. Edit anything; your edit is what is approved, and the audit log keeps that it was edited.</p>
@@ -79,12 +113,31 @@
       {% endif %}
     </section>
 
+    <section class="sec">
+      <h2 id="ld-brief" class="kicker">Call brief · {% if d.brief %}written by {{ 'Claude' if d.brief_by == 'claude' else 'the template' }}{% else %}not written yet{% endif %}{% call note('brief-note', 'What the call brief is') %}<span class="ln">What to have in mind in the minute before phoning: the first sentence, why now, three points, three questions and the two objections to expect.</span><span class="ln">It is for the rep, not sent to anyone. {% if writer.is_model %}Claude writes it from the same facts as the email, and it is kept only if it passes the same checks.{% else %}It is built by fixed rules from the score's reasons; with a Claude credential set, Claude writes it.{% endif %}</span>{% endcall %}</h2>
+      {% if d.brief %}
+      <div class="brief">
+        <p class="opener">“{{ d.brief.opener }}”</p>
+        <div><h3>Why now</h3><p>{{ d.brief.why_now }}</p></div>
+        <div><h3>Three points</h3><ol>{% for t in d.brief.talking_points %}<li>{{ t }}</li>{% endfor %}</ol></div>
+        <div><h3>Three questions</h3><ul>{% for q in d.brief.questions %}<li>{{ q }}</li>{% endfor %}</ul></div>
+        <div><h3>Expect to hear</h3><dl>{% for o in d.brief.objections %}<div><dt>“{{ o.objection }}”</dt><dd>{{ o.reply }}</dd></div>{% endfor %}</dl></div>
+      </div>
+      {% endif %}
+      {% if can.act_on_leads and (writer.is_model or not d.brief) %}
+      <form class="byline" method="post" action="/lead/{{ d.id }}/write">
+        <input type="hidden" name="what" value="brief">
+        <button class="btn" type="submit" data-busy="{{ 'Claude is writing…' if writer.is_model else 'Writing…' }}">{% if writer.is_model %}{{ 'Have Claude write it again' if d.brief_by == 'claude' else 'Have Claude write the brief' }}{% else %}Write the brief{% endif %}</button>
+      </form>
+      {% endif %}
+    </section>
+
     {% if history %}
     <section class="sec">
       <h2 id="ld-history" class="kicker">Decisions · {{ history|length }}</h2>
       <ul class="history">{% for h in history %}
-        <li><span><b>{{ h.who or h.username }}</b> {{ h.action }} it{% if h.reason %}: {{ reject_reasons.get(h.reason, h.reason) }}{% endif %}{% if h.edited %}, after editing the draft{% endif %}</span>
-          <span class="small muted">{{ h.at|when }} UTC · the score on screen was {{ h.score }}{% if h.note %} · “{{ h.note }}”{% endif %}</span></li>
+        <li><span><b>{{ h.who or h.username }}</b> {{ h.action }} it{% if h.reason %}: {{ reject_reasons.get(h.reason, h.reason) }}{% endif %}{% if h.edited %}, after editing the draft{% endif %}{% if h.action == 'approved' and h.written_by %} ({{ 'Claude' if h.written_by == 'claude' else 'the template' }} wrote it){% endif %}</span>
+          <span class="small muted">{{ h.at|when }} UTC · on screen: {% if h.chance is not none %}a {{ (h.chance * 100)|round|int }}% chance, {% endif %}{{ h.score }} points{% if h.note %} · “{{ h.note }}”{% endif %}</span></li>
       {% endfor %}</ul>
     </section>
     {% endif %}
@@ -113,6 +166,7 @@
 <footer class="footnote">
   <ol class="fnotes">
     <li id="fn-npi">Synthetic: the record has the NPI registry's fields, but the practice is made up and its NPI is a random number with a valid check digit. The data agent's job is to fill these from the NPPES registry instead.</li>
+    <li id="fn-sim">There are no real sales outcomes yet, so the model learned from simulated ones. The percentage ranks this lead against the others; it is not a forecast of real conversion. <a href="/model">How it was trained</a>.</li>
   </ol>
 </footer>
 {% endblock %}

@@ -110,3 +110,36 @@ def test_reject_needs_a_known_reason(app, sdr):
     lead_id = first_new_lead(app)
     seen = form_value(sdr.get(f"/lead/{lead_id}").text, "seen")
     assert sdr.post(f"/lead/{lead_id}/reject", data={"reason": "because", "seen": seen}).status_code == 400
+
+
+# ---------------- the trained model ----------------
+def test_leads_are_ranked_by_the_models_chance(app, sdr):
+    rows = app.state.conn.execute("SELECT l.id, l.chance, l.score FROM leads l WHERE status='new' ORDER BY chance DESC").fetchall()
+    assert all(r["chance"] is not None for r in rows)
+    page = sdr.get("/leads").text
+    order = [int(x.split('"')[0]) for x in page.split('href="/lead/')[1:]]
+    assert order == [r["id"] for r in rows] and "Chance</th>" in page and "Points</th>" in page
+    home = sdr.get("/").text
+    assert f'href="/lead/{rows[0]["id"]}"' in home.split("ov-top")[-1] and "trained model" in home
+
+
+def test_lead_page_shows_the_chance_and_what_moved_it(app, sdr):
+    lead = app.state.conn.execute("SELECT id, chance, score FROM leads ORDER BY chance DESC LIMIT 1").fetchone()
+    page = sdr.get(f"/lead/{lead['id']}").text
+    assert "Chance of converting" in page and f"{round(lead['chance'] * 100)}%" in page and "raises" in page
+    assert f"The points table says {lead['score']}" in page and "not a forecast of real conversion" in page
+
+
+def test_model_page_shows_the_benchmark_and_says_the_labels_are_simulated(sdr):
+    page = sdr.get("/model").text
+    assert "Benchmark" in page and "Trained model" in page and "Points table" in page and "Challenger" in page
+    assert "lr-8000-11" in page and "simulated" in page and "Visited /demo" in page
+
+
+def test_the_audit_log_keeps_the_chance_that_was_on_screen(app, sdr, manager):
+    lead = app.state.conn.execute("SELECT id, chance, model_version FROM leads WHERE status='new' ORDER BY chance DESC LIMIT 1").fetchone()
+    seen = form_value(sdr.get(f"/lead/{lead['id']}").text, "seen")
+    sdr.post(f"/lead/{lead['id']}/reject", data={"reason": "fit", "seen": seen})
+    row = app.state.conn.execute("SELECT chance, model_version FROM audit WHERE lead_id=?", (lead["id"],)).fetchone()
+    assert (row["chance"], row["model_version"]) == (lead["chance"], lead["model_version"])
+    assert f"{round(lead['chance'] * 100)}%" in manager.get("/audit").text

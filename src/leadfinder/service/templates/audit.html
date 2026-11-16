@@ -5,6 +5,7 @@
 .au-head{display:flex;flex-direction:column;gap:8px}.au-head p{margin:0}
 .au-table{min-width:820px}
 .au-table td{padding:10px 16px 10px 0}.au-table td:last-child{padding-right:0}
+.au-table th.r,.au-table td.r{padding-right:20px}
 .au-sec{display:flex;flex-direction:column;gap:12px}
 .au-sec>h2 .info-box{right:auto;width:520px;max-width:calc(100vw - 32px)}
 {% endblock %}
@@ -13,7 +14,7 @@
 <header class="au-head">
   <p class="kicker">Audit log · the latest {{ rows|length }}</p>
   <h1 class="title">{{ approved|length }} approved, {{ rows|length - approved|length }} rejected</h1>
-  <p class="muted">Every decision with who made it and the score that was on their screen</p>
+  <p class="muted">Every decision with who made it and the chance and points that were on their screen</p>
 </header>
 
 <section class="au-sec">
@@ -21,14 +22,15 @@
   {% if rows %}
   <div class="scroll">
     <table class="au-table" data-sortable>
-      <thead><tr><th scope="col">When (UTC)</th><th scope="col">Who</th><th scope="col">Practice</th><th scope="col">Decision</th><th scope="col" class="r">Score</th><th scope="col" data-nosort>Reason or edit</th></tr></thead>
+      <thead><tr><th scope="col">When (UTC)</th><th scope="col">Who</th><th scope="col">Practice</th><th scope="col">Decision</th><th scope="col" class="r">Chance</th><th scope="col" class="r">Points</th><th scope="col" data-nosort>Reason or edit</th></tr></thead>
       <tbody>{% for a in rows %}<tr>
         <td data-v="{{ a.at }}" class="num">{{ a.at|when }}</td>
         <td>{{ a.who or a.username }}</td>
         <td><a href="/lead/{{ a.lead_id }}">{{ a.practice }}</a></td>
         <td><span class="badge {{ a.action }}">{{ a.action }}</span></td>
+        <td class="r num" data-v="{{ a.chance if a.chance is not none else '' }}">{% if a.chance is not none %}{{ (a.chance * 100)|round|int }}%{% endif %}</td>
         <td class="r num">{{ a.score }}</td>
-        <td class="small">{% if a.action == 'rejected' %}{{ reject_reasons.get(a.reason, a.reason)|capitalize }}{% if a.note %} · “{{ a.note }}”{% endif %}{% else %}{{ 'Edited before approving' if a.edited else 'Approved as drafted' }}{% endif %}</td>
+        <td class="small">{% if a.action == 'rejected' %}{{ reject_reasons.get(a.reason, a.reason)|capitalize }}{% if a.note %} · “{{ a.note }}”{% endif %}{% else %}{{ 'Edited before approving' if a.edited else 'Approved as drafted' }}{% if a.written_by %} · written by {{ 'Claude' if a.written_by == 'claude' else 'the template' }}{% endif %}{% endif %}</td>
       </tr>{% endfor %}</tbody>
     </table>
   </div>

@@ -1,6 +1,7 @@
 """LeadFinder command line.
 
   python run.py seed [--n 40] [--force]          fill the database with synthetic practices, visits and scored leads
+  python run.py train [--n 8000] [--seed 11]     fit the scoring model on a simulated history and rescore every lead
   python run.py staff add NAME --role sdr|manager [--name "Full Name"]   add an account (the password is prompted for)
   python run.py serve [--port 8000]              the pages (same as `uvicorn asgi:app`)
 """
@@ -14,9 +15,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from leadfinder import auth                    # noqa: E402
+from leadfinder import auth, ml                # noqa: E402
 from leadfinder.db import DEFAULT_DB, connect  # noqa: E402
-from leadfinder.seed import seed               # noqa: E402
+from leadfinder.seed import apply_model, seed  # noqa: E402
 
 
 def cmd_seed(a):
@@ -25,9 +26,17 @@ def cmd_seed(a):
         for ext in ("", "-wal", "-shm"):
             Path(str(db) + ext).unlink(missing_ok=True)
     conn = connect(db)
+    ml.ensure(conn)
     out = seed(conn, n=a.n, seed=a.seed)
     auth.seed_demo_accounts(conn)
     print(json.dumps(out) if out["practices"] else f"{db} already has practices; pass --force to start again")
+
+
+def cmd_train(a):
+    conn = connect(a.db)
+    model = ml.train(conn, n=a.n, seed=a.seed)
+    print(json.dumps({k: model[k] for k in ("version", "n_train", "n_test", "base_rate", "metrics")}, indent=1))
+    print(f"rescored {apply_model(conn)} leads")
 
 
 def cmd_staff(a):
@@ -48,6 +57,8 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("seed"); s.add_argument("--n", type=int, default=40); s.add_argument("--seed", type=int, default=7)
     s.add_argument("--force", action="store_true"); s.set_defaults(fn=cmd_seed)
+    s = sub.add_parser("train"); s.add_argument("--n", type=int, default=8000); s.add_argument("--seed", type=int, default=11)
+    s.set_defaults(fn=cmd_train)
     s = sub.add_parser("staff"); s.add_argument("what", choices=["add"]); s.add_argument("username")
     s.add_argument("--role", choices=list(auth.ROLES), default="sdr"); s.add_argument("--name", default=""); s.set_defaults(fn=cmd_staff)
     s = sub.add_parser("serve"); s.add_argument("--port", type=int, default=8000); s.set_defaults(fn=cmd_serve)

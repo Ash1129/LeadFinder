@@ -3,7 +3,7 @@
 {% block page_class %} wide{% endblock %}
 {% block style %}
 .ld-head{display:flex;flex-direction:column;gap:8px}.ld-head p{margin:0}
-.ld-table{min-width:900px}
+.ld-table{min-width:980px}
 .ld-table td{padding:12px 16px 12px 0}.ld-table td:last-child{padding-right:0}
 .ld-table th.r,.ld-table td.r{padding-right:20px}
 .ld-name{font-weight:600}
@@ -17,7 +17,7 @@
 <header class="ld-head">
   <p class="kicker">Leads · {{ counts.all }} practices scored</p>
   <h1 class="title">{{ rows|length }} lead{{ 's' if rows|length != 1 }} {{ words[status] }}</h1>
-  <p class="muted">Highest score first; click a column's heading to sort by it.</p>
+  <p class="muted">Highest chance first; click a column's heading to sort by it.</p>
 </header>
 
 <ul class="tabs">
@@ -27,22 +27,23 @@
 </ul>
 
 <section class="ld-sec">
-  <h2 id="ld-list" class="kicker">{{ words[status]|capitalize }} · by score{% call note('band-note', 'What the bands are') %}<span class="ln">Hot: 70 points or more. Warm: 45 to 69. Cool: under 45.</span><span class="ln">The bands are the points table's, not a probability; the benchmark against a trained model and an LLM is still to come.</span>{% endcall %}</h2>
+  <h2 id="ld-list" class="kicker">{{ words[status]|capitalize }} · by the model's chance{% call note('band-note', 'What the chance and the bands are') %}<span class="ln">Chance: the trained model's estimate that the practice converts. It learned from simulated outcomes, so read it as a ranking, not a forecast.</span><span class="ln">Hot: the top fifth of the leads it was trained on{% if model %} ({{ (model.bands.hot * 100)|round|int }}% or more){% endif %}. Warm: the next three tenths{% if model %} ({{ (model.bands.warm * 100)|round|int }}% or more){% endif %}. Cool: the rest. Points is the hand-set table's score out of 100.</span>{% endcall %}</h2>
   {% if rows %}
   <div class="scroll">
     <table class="ld-table" data-sortable>
       <thead><tr>
-        <th scope="col" class="r">Score</th><th scope="col">Practice</th><th scope="col">Specialty</th><th scope="col" class="r">Providers</th>
+        <th scope="col" class="r">Chance</th><th scope="col" class="r">Points</th><th scope="col">Practice</th><th scope="col">Specialty</th><th scope="col" class="r">Providers</th>
         <th scope="col">EHR</th><th scope="col">Last visit</th><th scope="col" data-nosort>Strongest reason</th><th scope="col">Status</th>
       </tr></thead>
       <tbody>{% for l in rows %}<tr>
-        <td class="r num serif" style="font-size:22px">{{ l.score }}</td>
+        <td class="r num serif" style="font-size:22px" data-v="{{ l.chance if l.chance is not none else '' }}">{% if l.chance is not none %}{{ (l.chance * 100)|round|int }}%{% endif %}</td>
+        <td class="r num muted">{{ l.score }}</td>
         <td data-v="{{ l.name }}"><a class="ld-name" href="/lead/{{ l.id }}">{{ l.name }}</a><span class="ld-sub">{{ l.city }}, {{ l.state }}</span></td>
         <td>{{ l.specialty }}</td>
         <td class="r num">{{ l.providers }}</td>
         <td data-v="{{ l.ehr or '' }}">{{ l.ehr or '' }}{% if not l.ehr %}<span class="muted">unknown</span>{% endif %}</td>
         <td data-v="{{ l.last_visit or '' }}">{% if l.last_visit %}{{ l.last_visit|ago(now) }}{% else %}<span class="muted">none</span>{% endif %}</td>
-        <td class="ld-why">{{ l.reasons[0].label }}</td>
+        <td class="ld-why">{{ l.why }}</td>
         <td data-v="{{ l.status }} {{ l.band }}">{% if l.status == 'new' %}<span class="badge {{ l.band }}">{{ l.band }}</span>{% else %}<span class="badge {{ l.status }}">{{ l.status }}</span>{% endif %}</td>
       </tr>{% endfor %}</tbody>
     </table>

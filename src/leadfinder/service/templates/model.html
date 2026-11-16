@@ -1,0 +1,92 @@
+{% extends "base.html" %}{% block title %}Scoring model{% endblock %}
+{% from "_notes.html" import note %}
+{% block style %}
+.md-head{display:flex;flex-direction:column;gap:8px}.md-head p{margin:0}
+.md-sec{display:flex;flex-direction:column;gap:12px}.md-sec p{margin:0}
+.md-sec>h2 .info-box{right:auto;width:560px;max-width:calc(100vw - 32px)}
+.md-table{min-width:640px}
+.md-table td{padding:12px 16px 12px 0}.md-table td:last-child,.md-table th:last-child{padding-right:0}
+.md-table th.r,.md-table td.r{padding-right:20px}
+.md-name{font-weight:600}
+.md-sub{display:block;font-size:14px;line-height:20px;color:var(--muted)}
+.md-live td{border-top-color:var(--ink)}
+.md-facts{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:0 32px;max-width:760px}
+.md-facts dt,.md-facts dd{padding:10px 0;border-top:1px solid var(--line);margin:0}
+.md-facts dt{color:var(--muted)}
+{% endblock %}
+{% block body %}
+{% if not model %}
+<header class="md-head">
+  <p class="kicker">Scoring model</p>
+  <h1 class="title">No model is trained yet</h1>
+  <p class="muted">Leads are ranked by the points table. On the server, run <code>python run.py train</code>.</p>
+</header>
+{% else %}
+{%- set m = model.metrics -%}
+<header class="md-head">
+  <p class="kicker">Scoring model · {{ model.version }} · trained {{ model.trained_at|when }} UTC</p>
+  <h1 class="title">{{ (m.model.top * 100)|round|int }} in 100 of the model's top tenth convert; the points table's, {{ (m.points.top * 100)|round|int }}</h1>
+  <p class="muted">On {{ '{:,}'.format(model.n_test) }} simulated leads the model never saw<sup class="fn"><a href="#fn-sim" aria-label="footnote 1">1</a></sup> · {{ (model.base_rate * 100)|round|int }} in 100 of all of them convert · a {{ model.kind }}, so every prediction comes with its reasons</p>
+</header>
+
+<hr class="rule">
+
+<section class="md-sec">
+  <h2 id="md-bench" class="kicker">Benchmark · the same held-out leads, three scorers{% call note('bench-note', 'What the columns measure') %}<span class="ln">Top tenth: rank the held-out leads by the scorer and take the best 10%, the ones a team would call first; the share of them that converted. Lift is that share over the share among all leads.</span><span class="ln">AUC: the chance the scorer ranks a converter above a non-converter (0.5 is a coin). Average precision: how well converters are packed at the top of the whole ranking.</span>{% endcall %}</h2>
+  <div class="scroll">
+    <table class="md-table">
+      <thead><tr><th scope="col">Scorer</th><th scope="col" class="r">Top tenth</th><th scope="col" class="r">Lift</th><th scope="col" class="r">AUC</th><th scope="col" class="r">Avg precision</th></tr></thead>
+      <tbody>
+        {% for key, name, sub in [('model', 'Trained model', 'Logistic regression · ranks the leads'), ('points', 'Points table', 'Set by hand · shown beside the model on each lead'), ('challenger', 'Challenger', 'Gradient-boosted trees · reported, not used')] %}
+        <tr{% if key == 'model' %} class="md-live"{% endif %}>
+          <td><span class="md-name">{{ name }}</span><span class="md-sub">{{ sub }}</span></td>
+          <td class="r num">{{ (m[key].top * 100)|round|int }}%</td>
+          <td class="r num">{{ '%.2f'|format(m[key].lift) }}×</td>
+          <td class="r num">{{ '%.3f'|format(m[key].auc) }}</td>
+          <td class="r num">{{ '%.3f'|format(m[key].ap) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted">Read the gaps, not the levels: the three were judged on the same leads, so the order between them means something, while the numbers themselves belong to the simulator. An LLM's judgment on the same leads is the comparison still to run<sup class="fn"><a href="#fn-llm" aria-label="footnote 2">2</a></sup>.</p>
+</section>
+
+<section class="md-sec">
+  <h2 id="md-learned" class="kicker">What the model learned · each fact's weight{% call note('learned-note', 'How to read the weights') %}<span class="ln">Odds: how many times the odds of converting are multiplied when the fact is true, everything else equal. Above 1 raises the chance, below 1 lowers it.</span><span class="ln">Within a group (specialty, size, EHR) the weights are relative to each other: a practice has exactly one of each.</span>{% endcall %}</h2>
+  {% set widest = learned|map(attribute='coef')|map('abs')|max %}
+  <div class="scroll">
+    <table class="md-table" data-sortable>
+      <thead><tr><th scope="col">Fact</th><th scope="col">Source</th><th scope="col" class="r">Odds</th><th scope="col" data-nosort>Direction</th></tr></thead>
+      <tbody>{% for r in learned %}<tr>
+        <td>{{ r.label }}</td>
+        <td class="small muted">{{ r.source }}</td>
+        <td class="r num" data-v="{{ r.odds }}">×{{ '%.2f'|format(r.odds) }}</td>
+        <td><svg width="150" height="10" role="img" aria-label="{{ 'raises' if r.coef > 0 else 'lowers' }} the chance"><rect class="bar-track" x="0" y="3" width="96" height="4" rx="2"/><rect class="{{ 'bar-good' if r.coef > 0 else 'bar-worse' }}" x="0" y="3" width="{{ [(r.coef|abs / widest * 96)|round|int, 2]|max }}" height="4" rx="2"/><text x="104" y="9" font-size="11" fill="currentColor">{{ 'raises' if r.coef > 0.02 else ('lowers' if r.coef < -0.02 else 'no effect') }}</text></svg></td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+
+<section class="md-sec">
+  <h2 id="md-how" class="kicker">How it was trained</h2>
+  <dl class="md-facts">
+    <dt>History</dt><dd>{{ '{:,}'.format(model.n_train + model.n_test) }} simulated past leads, each won or lost<sup class="fn"><a href="#fn-sim" aria-label="footnote 1">1</a></sup></dd>
+    <dt>Fitted on</dt><dd class="num">{{ '{:,}'.format(model.n_train) }} of them</dd>
+    <dt>Judged on</dt><dd class="num">the other {{ '{:,}'.format(model.n_test) }}, which it never saw</dd>
+    <dt>What it sees</dt><dd>Specialty, number of providers, EHR, the pages visited, and whether a visit was in the last 7 days. Nothing about patients, and nothing the points table does not also see.</dd>
+    <dt>Hot</dt><dd class="num">a chance of {{ (model.bands.hot * 100)|round|int }}% or more: the top fifth of the leads it was fitted on</dd>
+    <dt>Warm</dt><dd class="num">{{ (model.bands.warm * 100)|round|int }}% or more: the next three tenths</dd>
+    <dt>To retrain</dt><dd><code>python run.py train</code> on the server; SDR decisions do not feed it yet<sup class="fn"><a href="#fn-loop" aria-label="footnote 3">3</a></sup></dd>
+  </dl>
+</section>
+
+<footer class="footnote">
+  <ol class="fnotes">
+    <li id="fn-sim">There are no real sales outcomes yet, so the history is simulated: made-up practices and visits, with each outcome drawn from a rule the simulator keeps to itself (it differs from the points table, includes an interaction the table cannot express, and has noise). The benchmark shows which scorer recovers that rule better. It does not show what real practices do, and no percentage here is a forecast of real conversion.</li>
+    <li id="fn-llm">Planned: give Claude the same held-out leads, ask it to rank them, and add its row to this table.</li>
+    <li id="fn-loop">Planned: approvals and rejections in the audit log become labels, so the model retrains on what SDRs actually decided.</li>
+  </ol>
+</footer>
+{% endif %}
+{% endblock %}

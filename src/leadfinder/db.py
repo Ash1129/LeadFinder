@@ -1,5 +1,6 @@
-"""The SQLite store: practices (the NPI-style facts), their website visits, the leads scored from them, staff and
-sessions, and the audit log of every approval and rejection.
+"""The SQLite store: practices (the NPI-style facts), their website visits, the leads scored from them (each with
+its points, the model's chance, its drafted email and call brief), staff and sessions, the trained model (one JSON
+value in settings), and the audit log of every approval and rejection.
 
 One file, opened once per process with `check_same_thread=False` (FastAPI runs plain `def` routes in a thread pool)
 and autocommit, so each statement lands on its own; WAL keeps readers and the one writer out of each other's way.
@@ -46,7 +47,14 @@ CREATE TABLE IF NOT EXISTS leads(
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'new',
-  scored_at REAL NOT NULL
+  scored_at REAL NOT NULL,
+  written_by TEXT NOT NULL DEFAULT 'template',
+  brief TEXT,
+  brief_by TEXT,
+  chance REAL,
+  chance_band TEXT,
+  chance_reasons TEXT,
+  model_version TEXT
 );
 CREATE TABLE IF NOT EXISTS audit(
   id INTEGER PRIMARY KEY,
@@ -60,7 +68,10 @@ CREATE TABLE IF NOT EXISTS audit(
   subject TEXT,
   body TEXT,
   edited INTEGER NOT NULL DEFAULT 0,
-  at REAL NOT NULL
+  at REAL NOT NULL,
+  written_by TEXT,
+  chance REAL,
+  model_version TEXT
 );
 CREATE TABLE IF NOT EXISTS staff(
   username TEXT PRIMARY KEY,
@@ -91,7 +102,22 @@ def connect(path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
     if str(path) != ":memory:":
         conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+# Columns added after the first version: a database made before them gets them here.
+ADDED = {"leads": {"written_by": "TEXT NOT NULL DEFAULT 'template'", "brief": "TEXT", "brief_by": "TEXT",
+                   "chance": "REAL", "chance_band": "TEXT", "chance_reasons": "TEXT", "model_version": "TEXT"},
+         "audit": {"written_by": "TEXT", "chance": "REAL", "model_version": "TEXT"}}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, columns in ADDED.items():
+        have = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns.items():
+            if name not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
 def get_setting(conn: sqlite3.Connection, key: str, default: Any = None) -> Any:

@@ -154,11 +154,13 @@ h2.kicker[id]{scroll-margin-top:24px}
     <p class="glabel">Work</p>
     <a class="nav" href="/"{% if nav == 'overview' %} aria-current="page"{% endif %}>Overview</a>
     <a class="nav" href="/leads"{% if nav == 'leads' %} aria-current="page"{% endif %}>Leads{% if new_count %} <span class="num" style="color: var(--accentInk)">{{ new_count }}</span>{% endif %}</a>
+    <p class="glabel">Scoring</p>
+    <a class="nav" href="/model"{% if nav == 'model' %} aria-current="page"{% endif %}>Scoring model</a>
     {% if can.view_audit %}<p class="glabel">Records</p>
     <a class="nav" href="/audit"{% if nav == 'audit' %} aria-current="page"{% endif %}>Audit log</a>{% endif %}
     <dl class="system">
-      <dt>Scoring</dt><dd>points table</dd>
-      <dt>Drafts</dt><dd>template</dd>
+      <dt>Scoring</dt><dd>{{ 'trained model' if model else 'points table' }}</dd>
+      <dt>Writer</dt><dd>{{ 'Claude' if writer.is_model else 'template' }}</dd>
       <dt>Data</dt><dd>Synthetic · NPI-style</dd>
       <dt>Sending</dt><dd>off</dd>
     </dl>

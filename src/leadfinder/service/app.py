@@ -2,9 +2,11 @@
 
 - Overview: what is waiting, the best leads not yet decided, and how the agents hand a lead along.
 - Leads: every scored practice, by status, sortable.
-- A lead: the practice's facts with their source, the score's reasons, the visits, and the drafted email, which the
-  SDR may edit and then approve, or reject with a reason. Nothing is sent from here; an approval marks the email
-  ready to send and is logged with the score and reasons that were on screen.
+- A lead: the practice's facts with their source, the score's reasons, the visits, the call brief, and the drafted
+  email, which the SDR may edit and then approve, or reject with a reason. The email and the brief start as
+  templates; with a Claude credential set, the SDR can have Claude write either one, and code checks what comes
+  back before it is kept (writer.py). Nothing is sent from here; an approval marks the email ready to send and is
+  logged with the score and reasons that were on screen and with who wrote the words.
 - Audit log (manager): every approval and rejection, who made it and what they saw.
 """
 from __future__ import annotations
@@ -20,9 +22,10 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import auth, outreach
+from .. import auth, ml, outreach
 from ..db import DEFAULT_DB, connect
-from ..seed import seed
+from ..seed import apply_model, seed
+from ..writer import Writer, WriterError, make_writer
 from . import security
 from .security import SESSION_COOKIE, THEME_COOKIE, clear_session_cookie, lead_token, safe_next, set_session_cookie
 
@@ -31,6 +34,9 @@ TEMPLATES = Jinja2Templates(directory=str(HERE / "templates"))
 REJECT_REASONS = {"fit": "not our kind of practice", "size": "too large: a health system buys this",
                   "customer": "already a customer", "contact": "wrong or missing contact", "other": "another reason"}
 STATUSES = ("new", "approved", "rejected")
+# Leads are ranked by the model's chance; the points table breaks ties and stands in for a lead the model has not scored.
+RANK = "COALESCE(l.chance, l.score / 100.0) DESC, l.score DESC, l.id"
+SHOWN = "COALESCE(l.chance_band, l.band) AS band"
 
 
 def when(ts: Optional[float]) -> str:
@@ -46,19 +52,32 @@ TEMPLATES.env.filters["when"] = when
 TEMPLATES.env.filters["ago"] = ago
 
 
-def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
+def why(row) -> dict:
+    """A list row with the one reason to show beside it: the model's strongest push up, else the points table's."""
+    d = dict(row) | {"reasons": json.loads(row["reasons"])}
+    ups = [r for r in json.loads(row["chance_reasons"] or "[]") if r["effect"] > 0]
+    d["why"] = ups[0]["label"] if ups else d["reasons"][0]["label"]
+    return d
+
+
+def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional[Writer] = None) -> FastAPI:
     """`demo`: on an empty database, fill it with synthetic practices and the demo logins. None reads
-    LEADFINDER_DEMO (on unless set to 0)."""
+    LEADFINDER_DEMO (on unless set to 0). `writer`: who writes emails and call briefs on request; None picks Claude
+    when a credential is set and the templates otherwise (writer.make_writer)."""
     conn = connect(db_path)
+    writer = writer or make_writer()
+    ml.ensure(conn)                     # the trained scorer: fitted on first start (a few seconds), then read from the database
     if demo if demo is not None else os.environ.get("LEADFINDER_DEMO", "1") != "0":
         seed(conn)
         auth.seed_demo_accounts(conn)
+    apply_model(conn)                   # leads from before the model, or scored by an older one
     auth.bootstrap_from_env(conn)
 
     app = FastAPI(title="LeadFinder", docs_url=None, redoc_url=None)
     app.middleware("http")(security.login_guard)  # the session cookie becomes request.state.me
     app.middleware("http")(security.guard)        # host and origin checks, security headers (runs first)
     app.state.conn = conn
+    app.state.writer = writer
 
     def theme(request: Request) -> str:
         return request.cookies.get(THEME_COOKIE, "system")
@@ -77,7 +96,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
         me: auth.Principal = request.state.me
         new = conn.execute("SELECT COUNT(*) n FROM leads WHERE status='new'").fetchone()["n"]
         return {"request": request, "me": me, "can": {p: me.can(p) for p in auth.PERMISSIONS}, "theme": theme(request),
-                "nav": "", "new_count": new, **kw}
+                "nav": "", "new_count": new, "writer": writer, "model": ml.load(conn), **kw}
 
     def allow(request: Request, permission: str) -> auth.Principal:
         me = request.state.me
@@ -87,13 +106,26 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
 
     def lead_row(lead_id: int):
         row = conn.execute("SELECT l.*, p.npi, p.name, p.specialty, p.providers, p.city, p.state, p.ehr, p.contact_name, "
-                           "p.contact_email, p.source FROM leads l JOIN practices p ON p.id = l.practice_id WHERE l.id=?",
+                           "p.contact_email, p.source, l.band AS points_band, COALESCE(l.chance_band, l.band) AS shown_band "
+                           "FROM leads l JOIN practices p ON p.id = l.practice_id WHERE l.id=?",
                            (lead_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "no such lead")
         d = dict(row)
         d["reasons"] = json.loads(d["reasons"])
+        d["brief"] = json.loads(d["brief"]) if d["brief"] else None
+        d["chance_reasons"] = json.loads(d["chance_reasons"]) if d["chance_reasons"] else []
         return d
+
+    def lead_page(request: Request, d: dict, status_code: int = 200, **kw):
+        """The lead's page, for the plain view and for every way a write on it can come back refused."""
+        visits = [dict(r) for r in conn.execute("SELECT page, at FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
+        history = [dict(r) for r in conn.execute("SELECT a.*, s.name who FROM audit a LEFT JOIN staff s ON s.username = a.username "
+                                                 "WHERE a.lead_id=? ORDER BY a.at DESC", (d["id"],))]
+        base = dict(nav="leads", d=d, visits=visits, history=history, problems=outreach.check(d["subject"], d["body"]),
+                    token=lead_token(conn, d["id"]), reject_reasons=REJECT_REASONS, stale=False, done="", wrote="",
+                    write_error="", blocked=False, now=time.time())
+        return TEMPLATES.TemplateResponse(request, "lead.html", ctx(request, **(base | kw)), status_code=status_code)
 
     # ---------------- logging in ----------------
     def login_view(request: Request, next_: str, error: str = "", status: int = 200):
@@ -130,10 +162,10 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
         counts = {s: 0 for s in STATUSES}
         for r in conn.execute("SELECT status, COUNT(*) n FROM leads GROUP BY status"):
             counts[r["status"]] = r["n"]
-        hot = conn.execute("SELECT COUNT(*) n FROM leads WHERE status='new' AND band='hot'").fetchone()["n"]
-        top = [dict(r) | {"reasons": json.loads(r["reasons"])} for r in conn.execute(
-            "SELECT l.id, l.score, l.band, l.reasons, p.name, p.specialty, p.providers, p.city, p.state FROM leads l "
-            "JOIN practices p ON p.id = l.practice_id WHERE l.status='new' ORDER BY l.score DESC, l.id LIMIT 8")]
+        hot = conn.execute("SELECT COUNT(*) n FROM leads WHERE status='new' AND COALESCE(chance_band, band)='hot'").fetchone()["n"]
+        top = [why(r) for r in conn.execute(
+            f"SELECT l.id, l.score, {SHOWN}, l.chance, l.chance_reasons, l.reasons, p.name, p.specialty, p.providers, p.city, p.state "
+            f"FROM leads l JOIN practices p ON p.id = l.practice_id WHERE l.status='new' ORDER BY {RANK} LIMIT 8")]
         stages = {
             "practices": conn.execute("SELECT COUNT(*) n FROM practices").fetchone()["n"],
             "visits": conn.execute("SELECT COUNT(*) n FROM visits").fetchone()["n"],
@@ -148,10 +180,10 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
         allow(request, "view_leads")
         status = status if status in STATUSES + ("all",) else "new"
         where = "" if status == "all" else "WHERE l.status=?"
-        rows = [dict(r) | {"reasons": json.loads(r["reasons"])} for r in conn.execute(
-            f"SELECT l.id, l.score, l.band, l.status, l.reasons, p.name, p.specialty, p.providers, p.city, p.state, p.ehr, "
-            f"(SELECT MAX(at) FROM visits v WHERE v.practice_id = p.id) last_visit FROM leads l "
-            f"JOIN practices p ON p.id = l.practice_id {where} ORDER BY l.score DESC, l.id", () if status == "all" else (status,))]
+        rows = [why(r) for r in conn.execute(
+            f"SELECT l.id, l.score, {SHOWN}, l.chance, l.chance_reasons, l.status, l.reasons, p.name, p.specialty, p.providers, p.city, "
+            f"p.state, p.ehr, (SELECT MAX(at) FROM visits v WHERE v.practice_id = p.id) last_visit FROM leads l "
+            f"JOIN practices p ON p.id = l.practice_id {where} ORDER BY {RANK}", () if status == "all" else (status,))]
         counts = {s: 0 for s in STATUSES}
         for r in conn.execute("SELECT status, COUNT(*) n FROM leads GROUP BY status"):
             counts[r["status"]] = r["n"]
@@ -160,26 +192,43 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
                                                                      now=time.time()))
 
     @app.get("/lead/{lead_id}", response_class=HTMLResponse)
-    def lead(request: Request, lead_id: int, stale: str = "", done: str = ""):
+    def lead(request: Request, lead_id: int, stale: str = "", done: str = "", wrote: str = ""):
         allow(request, "view_leads")
+        return lead_page(request, lead_row(lead_id), stale=stale == "1", done=done, wrote=wrote if wrote in ("email", "brief") else "")
+
+    @app.post("/lead/{lead_id}/write")
+    def write(request: Request, lead_id: int, what: str = Form(...)):
+        """Have the writer (Claude, or the templates) write this lead's first email or its call brief. The email
+        only while the lead is undecided; what was approved or rejected stays as it was."""
+        allow(request, "act_on_leads")
         d = lead_row(lead_id)
-        visits = [dict(r) for r in conn.execute("SELECT page, at FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
-        history = [dict(r) for r in conn.execute("SELECT a.*, s.name who FROM audit a LEFT JOIN staff s ON s.username = a.username "
-                                                 "WHERE a.lead_id=? ORDER BY a.at DESC", (lead_id,))]
-        return TEMPLATES.TemplateResponse(request, "lead.html", ctx(request, nav="leads", d=d, visits=visits, history=history,
-                                                                    problems=outreach.check(d["subject"], d["body"]), token=lead_token(conn, lead_id),
-                                                                    reject_reasons=REJECT_REASONS, stale=stale == "1", done=done,
-                                                                    now=time.time()))
+        if what not in ("email", "brief"):
+            raise HTTPException(400, "write the email or the brief")
+        if what == "email" and d["status"] != "new":
+            return RedirectResponse(f"/lead/{lead_id}?stale=1", status_code=303)
+        pages = [r["page"] for r in conn.execute("SELECT page FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
+        try:
+            if what == "email":
+                subject, body = writer.email(d, d["reasons"], pages)
+                conn.execute("UPDATE leads SET subject=?, body=?, written_by=? WHERE id=? AND status='new'",
+                             (subject, body, writer.name, lead_id))
+            else:
+                brief = writer.brief(d, d["reasons"], pages)
+                conn.execute("UPDATE leads SET brief=?, brief_by=? WHERE id=?", (json.dumps(brief), writer.name, lead_id))
+        except WriterError as e:
+            return lead_page(request, d, status_code=502, write_error=f"{str(e)[:1].upper()}{str(e)[1:]}. The {what} is unchanged.")
+        return RedirectResponse(f"/lead/{lead_id}?wrote={what}", status_code=303)
 
     def decide(request: Request, lead_id: int, seen: str, action: str, **kw):
         me = allow(request, "act_on_leads")
         d = lead_row(lead_id)
         if seen != lead_token(conn, lead_id) or d["status"] != "new":
             return RedirectResponse(f"/lead/{lead_id}?stale=1", status_code=303)
-        conn.execute("INSERT INTO audit(lead_id, username, action, reason, note, score, reasons, subject, body, edited, at) "
-                     "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+        conn.execute("INSERT INTO audit(lead_id, username, action, reason, note, score, reasons, subject, body, edited, at, written_by, "
+                     "chance, model_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                      (lead_id, me.username, action, kw.get("reason"), kw.get("note") or None, d["score"], json.dumps(d["reasons"]),
-                      kw.get("subject"), kw.get("body"), int(bool(kw.get("edited"))), time.time()))
+                      kw.get("subject"), kw.get("body"), int(bool(kw.get("edited"))), time.time(), d["written_by"], d["chance"],
+                      d["model_version"]))
         conn.execute("UPDATE leads SET status=?, subject=COALESCE(?, subject), body=COALESCE(?, body) WHERE id=?",
                      (action, kw.get("subject"), kw.get("body"), lead_id))
         return RedirectResponse(f"/lead/{lead_id}?done={action}", status_code=303)
@@ -191,12 +240,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
         d = lead_row(lead_id)
         problems = outreach.check(subject, body)
         if problems:
-            visits = [dict(r) for r in conn.execute("SELECT page, at FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
-            d = d | {"subject": subject, "body": body}
-            return TEMPLATES.TemplateResponse(request, "lead.html", ctx(request, nav="leads", d=d, visits=visits, history=[],
-                                                                        problems=problems, token=seen, reject_reasons=REJECT_REASONS,
-                                                                        stale=False, done="", blocked=True, now=time.time()),
-                                              status_code=422)
+            return lead_page(request, d | {"subject": subject, "body": body}, status_code=422, problems=problems, token=seen, blocked=True)
         edited = subject != d["subject"] or body != d["body"]
         return decide(request, lead_id, seen, "approved", subject=subject, body=body, edited=edited)
 
@@ -213,6 +257,12 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None) -> FastAPI:
         rows = [dict(r) for r in conn.execute("SELECT a.*, s.name who, p.name practice FROM audit a LEFT JOIN staff s ON s.username = a.username "
                                               "JOIN leads l ON l.id = a.lead_id JOIN practices p ON p.id = l.practice_id ORDER BY a.at DESC LIMIT 500")]
         return TEMPLATES.TemplateResponse(request, "audit.html", ctx(request, nav="audit", rows=rows, reject_reasons=REJECT_REASONS))
+
+    @app.get("/model", response_class=HTMLResponse)
+    def model_page(request: Request):
+        allow(request, "view_leads")
+        model = ml.load(conn)
+        return TEMPLATES.TemplateResponse(request, "model.html", ctx(request, nav="model", learned=ml.learned(model) if model else []))
 
     @app.post("/theme")
     def set_theme(theme: str = Form("system"), next: str = Form("/")):
