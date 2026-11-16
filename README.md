@@ -36,7 +36,9 @@ visits, their scored leads and call briefs (no emails: those are written on requ
 To have Claude write the emails and call briefs, put `ANTHROPIC_API_KEY=...` in a `.env` file beside `asgi.py`
 (it is gitignored; `.env.example` lists every setting) and restart. The tests never call the API.
 
-To retrain the model and rescore every lead:
+The first start fits six versions of the model, one for each simulated month of history, and a scorecard decides
+which is live (the Scoring model page shows all six side by side with the decision on each). To add a month, fit the
+next version and put it to the scorecard:
 
 ```bash
 .venv/bin/python run.py train

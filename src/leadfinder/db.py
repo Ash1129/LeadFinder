@@ -1,6 +1,6 @@
 """The SQLite store: practices (the NPI-style facts), their website visits, the leads scored from them (each with
 its points, the model's chance, its drafted email and call brief), staff and sessions, the trained model (one JSON
-value in settings), and the audit log of every approval and rejection.
+value in settings, every version ever fitted in model_runs), and the audit log of every approval and rejection.
 
 One file, opened once per process with `check_same_thread=False` (FastAPI runs plain `def` routes in a thread pool)
 and autocommit, so each statement lands on its own; WAL keeps readers and the one writer out of each other's way.
@@ -82,6 +82,16 @@ CREATE TABLE IF NOT EXISTS staff(
   failed INTEGER NOT NULL DEFAULT 0,
   locked_until REAL,
   created_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS model_runs(
+  version TEXT PRIMARY KEY,
+  month INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  verdict TEXT NOT NULL,
+  against TEXT,
+  card TEXT NOT NULL,
+  trained_at REAL NOT NULL,
+  model TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS sessions(
   token_hash TEXT PRIMARY KEY,

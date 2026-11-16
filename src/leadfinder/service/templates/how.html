@@ -74,6 +74,7 @@
     <dt>The points table</dt><dd>Set by hand: so many points for the specialty, the size, the EHR and each page visited, capped at 100. It is kept beside the model so a rep can see where the two disagree.</dd>
     <dt>What both see</dt><dd>Specialty, number of providers, EHR, the pages visited and whether a visit was in the last 7 days. Nothing else.</dd>
     <dt>What the model learned from</dt><dd>A simulated history, because there are no real outcomes yet<sup class="fn"><a href="#fn-sim" aria-label="footnote 3">3</a></sup>. <a href="/model">The benchmark and every weight</a>.</dd>
+    <dt>Which version is live</dt><dd>{% if model %}{{ model.version }}. A new version is fitted each simulated month and marked against the live one on a scorecard of four measures; it goes live only if it wins the card. <a href="/model#md-runs">Every version side by side</a>.{% else %}None yet.{% endif %}</dd>
   </dl>
 </section>
 
@@ -108,7 +109,7 @@
       <tbody>
         <tr><td>Practices</td><td>Made up, with the registry's fields and an NPI that passes the check digit</td><td>Looked up in the NPPES registry</td></tr>
         <tr><td>Visits</td><td>Made up, over the last three weeks</td><td>Read from the site's visitor-tracking tool</td></tr>
-        <tr><td>The model's training</td><td>A simulated history of won and lost leads</td><td>Retrained on what SDRs approved and rejected</td></tr>
+        <tr><td>The model's training</td><td>A simulated history of won and lost leads, a new version each simulated month, a scorecard deciding which is live</td><td>Retrained on what SDRs approved and rejected, through the same scorecard</td></tr>
         <tr><td>The benchmark</td><td>The model, the points table and a second model, on the same held-out leads</td><td>Claude's own ranking of those leads, as a fourth row</td></tr>
         <tr><td>Writing</td><td>{{ 'Claude, on request, checked by code' if writer.is_model else 'A template, on request; Claude once a credential is set' }}</td><td>The same</td></tr>
         <tr><td>Sending</td><td>Off: an approval marks the email ready to send</td><td>A person's mail tool sends what was approved</td></tr>

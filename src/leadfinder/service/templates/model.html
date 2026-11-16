@@ -13,6 +13,15 @@
 .md-facts{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:0 32px;max-width:760px}
 .md-facts dt,.md-facts dd{padding:10px 0;border-top:1px solid var(--line);margin:0}
 .md-facts dt{color:var(--muted)}
+.md-runs{min-width:980px}
+.md-runs tbody th,.md-card tbody th{font:inherit;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink);border-top:1px solid var(--line);padding:12px 16px 12px 0}
+.md-runs thead th.vcol{font-size:15px;line-height:22px;letter-spacing:0;text-transform:none;color:var(--ink);font-weight:600}
+.md-runs td{min-width:120px}.md-runs tbody th{min-width:176px}
+.md-runs .md-sub{font-weight:400}
+.md-runs tr.md-why td{font-size:14px;line-height:20px;color:var(--muted)}
+.md-islive{border-left:1px solid var(--ink);padding-left:12px !important}
+.md-better{color:var(--good)}.md-blocked{color:var(--bad)}
+.md-card{min-width:640px;max-width:920px}.md-card th{white-space:nowrap}
 {% endblock %}
 {% block body %}
 {% if not model %}
@@ -24,7 +33,7 @@
 {% else %}
 {%- set m = model.metrics -%}
 <header class="md-head">
-  <p class="kicker">Scoring model · {{ model.version }} · trained {{ model.trained_at|when }} UTC</p>
+  <p class="kicker">Scoring model · {{ model.version }}, the live one of {{ runs|length }} versions · went live {{ model.trained_at|when }} UTC</p>
   <h1 class="title">{{ (m.model.top * 100)|round|int }} in 100 of the model's top tenth convert; the points table's, {{ (m.points.top * 100)|round|int }}</h1>
   <p class="muted">On {{ '{:,}'.format(model.n_test) }} simulated leads the model never saw<sup class="fn"><a href="#fn-sim" aria-label="footnote 1">1</a></sup> · {{ (model.base_rate * 100)|round|int }} in 100 of all of them convert · a {{ model.kind }}, so every prediction comes with its reasons</p>
 </header>
@@ -53,6 +62,39 @@
 </section>
 
 <section class="md-sec">
+  <h2 id="md-runs" class="kicker">Every version · live against the rest{% call note('runs-note', 'How to read the columns') %}<span class="ln">One column a version. Each was fitted at the end of a simulated month<sup class="fn"><a href="#fn-sim" aria-label="footnote 1">1</a></sup>, on every outcome known by then, and measured on the same {{ '{:,}'.format(model.n_test) }} held-out leads, so the columns can be read against each other.</span><span class="ln">The word under a number is its mark on the scorecard, against the version that was live when it was judged: better, the same, worse but within the allowance, or worse by too far. The first model had nothing to be marked against.</span>{% endcall %}</h2>
+  <div class="scroll" role="region" aria-label="Measures by version, scrolls sideways" tabindex="0">
+    <table class="md-table md-runs">
+      <thead><tr><th scope="col">Measure</th>{% for r in runs %}<th scope="col" class="vcol{{ ' md-islive' if r.status == 'live' }}">{{ r.version }}<span class="md-sub{{ ' md-better' if r.status == 'live' }}">{{ r.word }}</span></th>{% endfor %}</tr></thead>
+      <tbody>
+        <tr><th scope="row">Fitted on<span class="md-sub">outcomes known by then</span></th>{% for r in runs %}<td class="num{{ ' md-islive' if r.status == 'live' }}">{{ '{:,}'.format(r.n_train) }}<span class="md-sub">month {{ r.month }}</span></td>{% endfor %}</tr>
+        {% for key, label, sign, allowance, why in measures %}
+        <tr><th scope="row">{{ label }}<span class="md-sub">{{ 'higher' if sign > 0 else 'lower' }} is better</span></th>{% for r in runs %}{% set c = r.cells[key] %}<td class="num{{ ' md-islive' if r.status == 'live' }}">{{ c.value }}{% if c.mark %}<span class="md-sub md-{{ c.mark }}">{{ marks[c.mark] }}</span>{% endif %}</td>{% endfor %}</tr>
+        {% endfor %}
+        <tr><th scope="row">Lift<span class="md-sub">top tenth over all leads</span></th>{% for r in runs %}<td class="num{{ ' md-islive' if r.status == 'live' }}">{{ '%.2f'|format(r.lift) }}×</td>{% endfor %}</tr>
+        <tr class="md-why"><th scope="row">Decision<span class="md-sub">by the scorecard</span></th>{% for r in runs %}<td{{ ' class="md-islive"'|safe if r.status == 'live' }}>{{ r.verdict }}</td>{% endfor %}</tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="md-sec">
+  <h2 id="md-card" class="kicker">How a version goes live · the scorecard</h2>
+  <p>A new version is marked against the live one on four measures, on the same held-out leads. It goes live when no measure is worse by more than its allowance and it is better on more measures than it is worse on; it has seen more outcomes than the live version, so a card it wins is reason enough. Otherwise it is sent back and stays in the table above with the reason. Nobody signs it off by hand.</p>
+  <div class="scroll">
+    <table class="md-table md-card">
+      <thead><tr><th scope="col">Measure</th><th scope="col">Better means</th><th scope="col">Allowance</th><th scope="col">Why it is on the card</th></tr></thead>
+      <tbody>{% for key, label, sign, allowance, why in measures %}<tr>
+        <th scope="row">{{ label }}</th>
+        <td>{{ 'higher' if sign > 0 else 'lower' }}</td>
+        <td class="num">{{ allowances[key] }}</td>
+        <td class="small muted">{{ why|capitalize }}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+
+<section class="md-sec">
   <h2 id="md-learned" class="kicker">What the model learned · each fact's weight{% call note('learned-note', 'How to read the weights') %}<span class="ln">Odds: how many times the odds of converting are multiplied when the fact is true, everything else equal. Above 1 raises the chance, below 1 lowers it.</span><span class="ln">Within a group (specialty, size, EHR) the weights are relative to each other: a practice has exactly one of each.</span>{% endcall %}</h2>
   {% set widest = learned|map(attribute='coef')|map('abs')|max %}
   <div class="scroll">
@@ -71,13 +113,13 @@
 <section class="md-sec">
   <h2 id="md-how" class="kicker">How it was trained</h2>
   <dl class="md-facts">
-    <dt>History</dt><dd>{{ '{:,}'.format(model.n_train + model.n_test) }} simulated past leads, each won or lost<sup class="fn"><a href="#fn-sim" aria-label="footnote 1">1</a></sup></dd>
-    <dt>Fitted on</dt><dd class="num">{{ '{:,}'.format(model.n_train) }} of them</dd>
-    <dt>Judged on</dt><dd class="num">the other {{ '{:,}'.format(model.n_test) }}, which it never saw</dd>
+    <dt>History</dt><dd>Simulated past leads, each won or lost<sup class="fn"><a href="#fn-sim" aria-label="footnote 1">1</a></sup>, arriving a month at a time: {{ '{:,}'.format(first) }} behind the first model, {{ '{:,}'.format(per_month) }} more each month after</dd>
+    <dt>Fitted on</dt><dd class="num">{{ '{:,}'.format(model.n_train) }} of them: everything known by month {{ model.month }}</dd>
+    <dt>Judged on</dt><dd class="num">another {{ '{:,}'.format(model.n_test) }}, which no version ever saw</dd>
     <dt>What it sees</dt><dd>Specialty, number of providers, EHR, the pages visited, and whether a visit was in the last 7 days. Nothing about patients, and nothing the points table does not also see.</dd>
     <dt>Hot</dt><dd class="num">a chance of {{ (model.bands.hot * 100)|round|int }}% or more: the top fifth of the leads it was fitted on</dd>
     <dt>Warm</dt><dd class="num">{{ (model.bands.warm * 100)|round|int }}% or more: the next three tenths</dd>
-    <dt>To retrain</dt><dd><code>python run.py train</code> on the server; SDR decisions do not feed it yet<sup class="fn"><a href="#fn-loop" aria-label="footnote 3">3</a></sup></dd>
+    <dt>To retrain</dt><dd><code>python run.py train</code> on the server adds one simulated month, fits the next version and puts it to the scorecard; SDR decisions do not feed it yet<sup class="fn"><a href="#fn-loop" aria-label="footnote 3">3</a></sup></dd>
   </dl>
 </section>
 

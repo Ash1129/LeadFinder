@@ -184,7 +184,17 @@ def test_lead_page_shows_the_chance_and_what_moved_it(app, sdr):
 def test_model_page_shows_the_benchmark_and_says_the_labels_are_simulated(sdr):
     page = sdr.get("/model").text
     assert "Benchmark" in page and "Trained model" in page and "Points table" in page and "Challenger" in page
-    assert "lr-8000-11" in page and "simulated" in page and "Visited /demo" in page
+    assert "demo-v6" in page and "simulated" in page and "Visited /demo" in page
+
+
+def test_model_page_shows_every_version_and_the_scorecard(app, sdr):
+    page = sdr.get("/model").text
+    runs = app.state.conn.execute("SELECT version, status, verdict FROM model_runs ORDER BY month").fetchall()
+    assert len(runs) == 6 and all(r["version"] in page and r["verdict"].replace("'", "&#39;") in page for r in runs)
+    assert "Every version" in page and "the live one of 6 versions" in page and "was live" in page and "sent back" in page
+    assert "How a version goes live" in page and "Calibration error" in page and "2.5 points" in page and "1 point<" in page
+    live = next(r["version"] for r in runs if r["status"] == "live")
+    assert f"model {live}" in sdr.get("/lead/1").text and f"{live}." in sdr.get("/how").text
 
 
 def test_the_audit_log_keeps_the_chance_that_was_on_screen(app, sdr, manager):

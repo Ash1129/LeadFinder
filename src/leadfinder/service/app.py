@@ -9,6 +9,8 @@
   button fills the template. Nothing is sent from here; an approval marks the email ready to send and is logged
   with the score and reasons that were on screen and with who wrote the words.
 - How it works: the path of a lead in five steps, who does each, and what is real today.
+- Scoring model: the benchmark, every version of the model side by side with the scorecard that decided which is live,
+  and what the live one learned.
 - Audit log (manager): every approval and rejection, who made it and what they saw.
 """
 from __future__ import annotations
@@ -274,7 +276,12 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
     def model_page(request: Request):
         allow(request, "view_leads")
         model = ml.load(conn)
-        return TEMPLATES.TemplateResponse(request, "model.html", ctx(request, nav="model", learned=ml.learned(model) if model else []))
+        allowances = {key: (f"{a * 100:g} points" if key in ("top", "ece") else f"{a:g}").replace("1 points", "1 point")
+                      for key, _, _, a, _ in ml.MEASURES}
+        return TEMPLATES.TemplateResponse(request, "model.html", ctx(
+            request, nav="model", learned=ml.learned(model) if model else [], runs=ml.side_by_side(conn), measures=ml.MEASURES,
+            allowances=allowances, first=ml.FIRST, per_month=ml.MONTH,
+            marks={"better": "better", "same": "the same", "worse": "worse, allowed", "blocked": "worse, too far"}))
 
     @app.post("/theme")
     def set_theme(theme: str = Form("system"), next: str = Form("/")):
