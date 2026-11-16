@@ -1,0 +1,54 @@
+{% extends "base.html" %}{% block title %}Leads{% endblock %}
+{% from "_notes.html" import note %}
+{% block page_class %} wide{% endblock %}
+{% block style %}
+.ld-head{display:flex;flex-direction:column;gap:8px}.ld-head p{margin:0}
+.ld-table{min-width:900px}
+.ld-table td{padding:12px 16px 12px 0}.ld-table td:last-child{padding-right:0}
+.ld-table th.r,.ld-table td.r{padding-right:20px}
+.ld-name{font-weight:600}
+.ld-sub{display:block;font-size:14px;line-height:20px;color:var(--muted)}
+.ld-why{font-size:14px;line-height:20px;max-width:340px}
+.ld-sec{display:flex;flex-direction:column;gap:12px}
+.ld-sec>h2 .info-box{right:auto;width:520px;max-width:calc(100vw - 32px)}
+{% endblock %}
+{% block body %}
+{%- set words = {'new': 'waiting for review', 'approved': 'approved', 'rejected': 'rejected', 'all': 'scored'} -%}
+<header class="ld-head">
+  <p class="kicker">Leads · {{ counts.all }} practices scored</p>
+  <h1 class="title">{{ rows|length }} lead{{ 's' if rows|length != 1 }} {{ words[status] }}</h1>
+  <p class="muted">Highest score first; click a column's heading to sort by it.</p>
+</header>
+
+<ul class="tabs">
+  {% for s, label in [('new', 'Waiting'), ('approved', 'Approved'), ('rejected', 'Rejected'), ('all', 'All')] %}
+  <li><a href="/leads?status={{ s }}"{% if status == s %} aria-current="page"{% endif %}>{{ label }} <span class="n">{{ counts[s] }}</span></a></li>
+  {% endfor %}
+</ul>
+
+<section class="ld-sec">
+  <h2 id="ld-list" class="kicker">{{ words[status]|capitalize }} · by score{% call note('band-note', 'What the bands are') %}<span class="ln">Hot: 70 points or more. Warm: 45 to 69. Cool: under 45.</span><span class="ln">The bands are the points table's, not a probability; the benchmark against a trained model and an LLM is still to come.</span>{% endcall %}</h2>
+  {% if rows %}
+  <div class="scroll">
+    <table class="ld-table" data-sortable>
+      <thead><tr>
+        <th scope="col" class="r">Score</th><th scope="col">Practice</th><th scope="col">Specialty</th><th scope="col" class="r">Providers</th>
+        <th scope="col">EHR</th><th scope="col">Last visit</th><th scope="col" data-nosort>Strongest reason</th><th scope="col">Status</th>
+      </tr></thead>
+      <tbody>{% for l in rows %}<tr>
+        <td class="r num serif" style="font-size:22px">{{ l.score }}</td>
+        <td data-v="{{ l.name }}"><a class="ld-name" href="/lead/{{ l.id }}">{{ l.name }}</a><span class="ld-sub">{{ l.city }}, {{ l.state }}</span></td>
+        <td>{{ l.specialty }}</td>
+        <td class="r num">{{ l.providers }}</td>
+        <td data-v="{{ l.ehr or '' }}">{{ l.ehr or '' }}{% if not l.ehr %}<span class="muted">unknown</span>{% endif %}</td>
+        <td data-v="{{ l.last_visit or '' }}">{% if l.last_visit %}{{ l.last_visit|ago(now) }}{% else %}<span class="muted">none</span>{% endif %}</td>
+        <td class="ld-why">{{ l.reasons[0].label }}</td>
+        <td data-v="{{ l.status }} {{ l.band }}">{% if l.status == 'new' %}<span class="badge {{ l.band }}">{{ l.band }}</span>{% else %}<span class="badge {{ l.status }}">{{ l.status }}</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">None yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

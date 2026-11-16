@@ -1,0 +1,87 @@
+{% extends "base.html" %}{% block title %}Overview{% endblock %}
+{% from "_notes.html" import note %}
+{% block style %}
+.ov-head{display:flex;flex-direction:column;gap:8px}
+.ov-head p,.ov-sec p{margin:0}
+.ov-figs{display:flex;flex-wrap:wrap;gap:24px 48px}
+.ov-fig{position:relative;display:flex;flex-direction:column;gap:4px;flex:0 1 auto}.ov-fig .big{white-space:nowrap}
+.ov-fig>span:not(.big){max-width:280px}
+.ov-fig .info-box{right:auto;width:320px;max-width:calc(100vw - 32px)}
+.ov-fig:last-child .info-box{left:auto;right:0}
+.ov-sec{display:flex;flex-direction:column;gap:12px}
+.ov-sec>h2 .info-box{right:auto;width:560px;max-width:calc(100vw - 32px)}
+.ov-top{min-width:720px}
+.ov-top td{padding:12px 16px 12px 0}.ov-top td:last-child{padding-right:0}
+.ov-top th.r,.ov-top td.r{padding-right:20px;width:72px}
+.ov-lead{font-weight:600}
+.ov-sub{display:block;font-size:14px;line-height:20px;color:var(--muted)}
+.ov-why{font-size:14px;line-height:20px}
+.stages{list-style:none;margin:0;padding:0;counter-reset:stage;max-width:860px}
+.stages li{counter-increment:stage;display:grid;grid-template-columns:40px minmax(0,1fr) max-content;gap:4px 16px;padding:14px 0;border-top:1px solid var(--line)}
+.stages li:last-child{border-bottom:1px solid var(--line)}
+.stages li::before{content:counter(stage, upper-roman);font-family:var(--heading);font-size:22px;line-height:24px;color:var(--accentInk)}
+.stages b{font-weight:600;display:block}
+.stages .num{align-self:start}
+{% endblock %}
+{% block body %}
+<header class="ov-head">
+  <p class="kicker">Overview · {{ now|when }} UTC<sup class="fn"><a href="#fn-data" aria-label="footnote 1">1</a></sup></p>
+  <h1 class="title">{{ counts.new }} lead{{ 's' if counts.new != 1 }} waiting for review{% if counts.new %}, {{ hot }} of them hot{% endif %}</h1>
+  <p class="muted">Independent practices, scored from their NPI-style record and their visits to the site · nothing is sent until an SDR approves the draft</p>
+</header>
+
+<hr class="rule">
+
+<section class="ov-figs" aria-label="Where the leads stand">
+  <div class="ov-fig">
+    <span class="big num">{{ counts.new }}</span>
+    <span>waiting for an SDR{% call note('wait-note', 'What waiting means') %}A practice is scored and its first email drafted; an SDR has not yet approved or rejected it.{% endcall %}</span>
+  </div>
+  <div class="ov-fig">
+    <span class="big num">{{ counts.approved }}</span>
+    <span>emails approved{% call note('ok-note', 'What approved means') %}The SDR read the draft, edited it or not, and passed it as ready to send. The guardrail checked it first: no patient information, no claims we cannot back, the opt-out footer in place.{% endcall %}</span>
+  </div>
+  <div class="ov-fig">
+    <span class="big num">{{ counts.rejected }}</span>
+    <span>leads rejected{% call note('no-note', 'Why rejections matter') %}Each rejection carries a reason. They are the learning signal: a reason that keeps coming back says which weight in the points table is wrong.{% endcall %}</span>
+  </div>
+</section>
+
+<section class="ov-sec">
+  <h2 id="ov-top" class="kicker">Top of the list · the best leads not yet decided{% call note('order-note', 'How this order is made') %}<span class="ln">By score, highest first. The score is a points table: specialty, number of providers, EHR, the pages visited and how recently<sup class="fn"><a href="#fn-score" aria-label="footnote 2">2</a></sup>.</span><span class="ln">Each lead's page shows every point and where it came from.</span>{% endcall %}</h2>
+  {% if top %}
+  <div class="scroll">
+    <table class="ov-top">
+      <thead><tr><th scope="col" class="r">Score</th><th scope="col">Practice</th><th scope="col">Strongest reason</th><th scope="col">Band</th></tr></thead>
+      <tbody>{% for l in top %}<tr>
+        <td class="r num serif" style="font-size:22px">{{ l.score }}</td>
+        <td><a class="ov-lead" href="/lead/{{ l.id }}">{{ l.name }}</a><span class="ov-sub">{{ l.specialty }} · {{ l.providers }} provider{{ 's' if l.providers != 1 }} · {{ l.city }}, {{ l.state }}</span></td>
+        <td class="ov-why">{{ l.reasons[0].label }} <span class="muted">(+{{ l.reasons[0].points }})</span></td>
+        <td><span class="badge {{ l.band }}">{{ l.band }}</span></td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <p><a href="/leads">All {{ counts.new }} waiting leads</a></p>
+  {% else %}
+  <p class="muted">Every lead has been decided. New visits will bring new ones.</p>
+  {% endif %}
+</section>
+
+<section class="ov-sec">
+  <h2 id="ov-chain" class="kicker">How a lead gets here · four agents and one person</h2>
+  <ol class="stages">
+    <li><div><b>Visit analysis</b><span class="small muted">Website visits tied to a practice: which pages, how often, how lately.</span></div><span class="num">{{ stages.visits }} visits</span></li>
+    <li><div><b>Enrichment</b><span class="small muted">The practice's NPI-style record: specialty, providers, location, EHR.</span></div><span class="num">{{ stages.practices }} practices</span></li>
+    <li><div><b>Scoring</b><span class="small muted">A transparent points table, every point with its reason and source.</span></div><span class="num">{{ stages.scored }} scored</span></li>
+    <li><div><b>Outreach draft</b><span class="small muted">A first email from public business facts only, checked by the guardrail.</span></div><span class="num">{{ stages.scored }} drafted</span></li>
+    <li><div><b>SDR approval</b><span class="small muted">A person approves, edits or rejects; every decision is logged.</span></div><span class="num">{{ counts.approved + counts.rejected }} decided</span></li>
+  </ol>
+</section>
+
+<footer class="footnote">
+  <ol class="fnotes">
+    <li id="fn-data">Synthetic data: the practices, people and visits are made up, and each NPI is a random number with a valid check digit, not a real provider's. Times are the server's clock, UTC.</li>
+    <li id="fn-score">The weights are a starting table, set by hand. SDR rejections are meant to move them, and a trained model is to be benchmarked against them and against an LLM's judgment.</li>
+  </ol>
+</footer>
+{% endblock %}

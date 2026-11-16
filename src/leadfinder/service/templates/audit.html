@@ -1,0 +1,39 @@
+{% extends "base.html" %}{% block title %}Audit log{% endblock %}
+{% from "_notes.html" import note %}
+{% block page_class %} wide{% endblock %}
+{% block style %}
+.au-head{display:flex;flex-direction:column;gap:8px}.au-head p{margin:0}
+.au-table{min-width:820px}
+.au-table td{padding:10px 16px 10px 0}.au-table td:last-child{padding-right:0}
+.au-sec{display:flex;flex-direction:column;gap:12px}
+.au-sec>h2 .info-box{right:auto;width:520px;max-width:calc(100vw - 32px)}
+{% endblock %}
+{% block body %}
+{%- set approved = rows|selectattr('action', 'equalto', 'approved')|list -%}
+<header class="au-head">
+  <p class="kicker">Audit log · the latest {{ rows|length }}</p>
+  <h1 class="title">{{ approved|length }} approved, {{ rows|length - approved|length }} rejected</h1>
+  <p class="muted">Every decision with who made it and the score that was on their screen</p>
+</header>
+
+<section class="au-sec">
+  <h2 id="au-list" class="kicker">Decisions · newest first{% call note('au-note', 'What is kept') %}<span class="ln">Each row keeps the score and the reasons as they were shown, and for an approval the exact words approved, so a later change to the weights or the template cannot rewrite what someone saw.</span>{% endcall %}</h2>
+  {% if rows %}
+  <div class="scroll">
+    <table class="au-table" data-sortable>
+      <thead><tr><th scope="col">When (UTC)</th><th scope="col">Who</th><th scope="col">Practice</th><th scope="col">Decision</th><th scope="col" class="r">Score</th><th scope="col" data-nosort>Reason or edit</th></tr></thead>
+      <tbody>{% for a in rows %}<tr>
+        <td data-v="{{ a.at }}" class="num">{{ a.at|when }}</td>
+        <td>{{ a.who or a.username }}</td>
+        <td><a href="/lead/{{ a.lead_id }}">{{ a.practice }}</a></td>
+        <td><span class="badge {{ a.action }}">{{ a.action }}</span></td>
+        <td class="r num">{{ a.score }}</td>
+        <td class="small">{% if a.action == 'rejected' %}{{ reject_reasons.get(a.reason, a.reason)|capitalize }}{% if a.note %} · “{{ a.note }}”{% endif %}{% else %}{{ 'Edited before approving' if a.edited else 'Approved as drafted' }}{% endif %}</td>
+      </tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">No decisions yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

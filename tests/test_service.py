@@ -1,0 +1,112 @@
+from fastapi.testclient import TestClient
+
+from leadfinder import auth
+from leadfinder.service.security import CSP
+
+from .conftest import form_value, login
+
+
+def first_new_lead(app) -> int:
+    return app.state.conn.execute("SELECT id FROM leads WHERE status='new' ORDER BY score DESC LIMIT 1").fetchone()["id"]
+
+
+# ---------------- logging in and security ----------------
+def test_pages_need_a_session(client):
+    r = client.get("/leads?status=all", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/login?next=%2Fleads%3Fstatus%3Dall"
+    assert client.post("/lead/1/reject", data={"reason": "fit"}).status_code == 401
+
+
+def test_login_page_shows_demo_logins_and_wrong_password_fails(client):
+    page = client.get("/login").text
+    assert "riley" in page and auth.DEMO_PASSWORD in page and "LeadFinder" in page
+    r = client.post("/login", data={"username": "riley", "password": "wrong-password"})
+    assert r.status_code == 401 and "do not match" in r.text
+
+
+def test_security_headers_and_the_one_script(client):
+    r = client.get("/login")
+    assert r.headers["content-security-policy"] == CSP and "script-src 'self'" in CSP
+    assert r.headers["x-frame-options"] == "DENY" and r.headers["x-content-type-options"] == "nosniff"
+    assert "<script>" not in r.text
+    js = client.get("/assets/app.js")
+    assert js.status_code == 200 and "javascript" in js.headers["content-type"] and "outline" in js.text
+
+
+def test_unknown_host_and_cross_site_writes_are_refused(sdr):
+    assert sdr.get("/", headers={"host": "evil.example"}).status_code == 400
+    r = sdr.post("/lead/1/reject", data={"reason": "fit"}, headers={"origin": "https://evil.example"})
+    assert r.status_code == 403
+
+
+def test_theme_cookie_is_written_into_the_page(sdr):
+    r = sdr.post("/theme", data={"theme": "dark", "next": "/leads"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/leads"
+    assert 'data-theme="dark"' in sdr.get("/leads").text
+    sdr.post("/theme", data={"theme": "nonsense", "next": "//evil.example"})
+    assert "data-theme" not in sdr.get("/").text.split(">", 2)[1]
+
+
+# ---------------- the pages ----------------
+def test_overview_and_leads_render_in_the_house_style(sdr):
+    home = sdr.get("/").text
+    assert "waiting for review" in home and 'class="kicker"' in home and 'class="fnotes"' in home and 'class="info"' in home
+    assert "Cormorant+Garamond" in home and '<script src="/assets/app.js" defer></script>' in home
+    leads = sdr.get("/leads").text
+    assert "data-sortable" in leads and 'aria-current="page"' in leads
+
+
+def test_lead_page_shows_reasons_facts_and_the_draft(app, sdr):
+    lead_id = first_new_lead(app)
+    page = sdr.get(f"/lead/{lead_id}").text
+    assert "every point and its source" in page and "NPI record" in page and "synthetic" in page
+    assert 'name="subject"' in page and "Approve the email" in page
+
+
+def test_sdr_cannot_open_the_audit_log_but_the_manager_can(sdr, manager):
+    assert sdr.get("/audit", headers={"accept": "text/html"}).status_code == 403
+    assert manager.get("/audit").status_code == 200
+
+
+def test_missing_lead_is_a_404(sdr):
+    assert sdr.get("/lead/99999").status_code == 404
+
+
+# ---------------- deciding ----------------
+def test_approve_logs_the_decision_and_the_edit(app, sdr, manager):
+    lead_id = first_new_lead(app)
+    page = sdr.get(f"/lead/{lead_id}").text
+    seen = form_value(page, "seen")
+    subject = form_value(page, "subject") + " (edited)"
+    body = app.state.conn.execute("SELECT body FROM leads WHERE id=?", (lead_id,)).fetchone()["body"]
+    r = sdr.post(f"/lead/{lead_id}/approve", data={"subject": subject, "body": body, "seen": seen}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith("done=approved")
+    row = app.state.conn.execute("SELECT * FROM audit WHERE lead_id=?", (lead_id,)).fetchone()
+    assert row["username"] == "riley" and row["action"] == "approved" and row["edited"] == 1 and row["subject"] == subject
+    assert "Edited before approving" in manager.get("/audit").text
+
+
+def test_guardrail_blocks_an_approval(app, sdr):
+    lead_id = first_new_lead(app)
+    seen = form_value(sdr.get(f"/lead/{lead_id}").text, "seen")
+    r = sdr.post(f"/lead/{lead_id}/approve", data={"subject": "Hi", "body": "We guarantee it. " * 5, "seen": seen})
+    assert r.status_code == 422 and "guardrail stopped" in r.text
+    assert app.state.conn.execute("SELECT status FROM leads WHERE id=?", (lead_id,)).fetchone()["status"] == "new"
+
+
+def test_a_stale_decision_is_refused(app, sdr):
+    lead_id = first_new_lead(app)
+    seen = form_value(sdr.get(f"/lead/{lead_id}").text, "seen")
+    other = login(TestClient(app), "jo")
+    assert other.post(f"/lead/{lead_id}/reject", data={"reason": "size", "seen": seen}, follow_redirects=False).status_code == 303
+    r = sdr.post(f"/lead/{lead_id}/reject", data={"reason": "fit", "seen": seen}, follow_redirects=False)
+    assert r.headers["location"].endswith("stale=1")
+    rows = app.state.conn.execute("SELECT username, reason FROM audit WHERE lead_id=?", (lead_id,)).fetchall()
+    assert [(r["username"], r["reason"]) for r in rows] == [("jo", "size")]
+    assert "Someone decided this lead" in sdr.get(f"/lead/{lead_id}?stale=1").text
+
+
+def test_reject_needs_a_known_reason(app, sdr):
+    lead_id = first_new_lead(app)
+    seen = form_value(sdr.get(f"/lead/{lead_id}").text, "seen")
+    assert sdr.post(f"/lead/{lead_id}/reject", data={"reason": "because", "seen": seen}).status_code == 400
