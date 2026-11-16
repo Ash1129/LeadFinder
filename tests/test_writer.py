@@ -109,7 +109,7 @@ def test_template_app_shows_the_seeded_brief_and_no_claude_button(app, sdr):
 def test_claude_writes_the_email_and_the_audit_log_says_so(claude_app, fake):
     sdr, lead = login(TestClient(claude_app)), first_lead(claude_app)
     page = sdr.get(f"/lead/{lead['id']}").text
-    assert "Have Claude write it" in page and "Have Claude write the brief" in page
+    assert "Have Claude write the email" in page and "Have Claude write the brief" in page and 'name="subject"' not in page
     body = f"Hi there,\n\nA note for {lead['name']} about online booking and the waitlist.\n\nWould 20 minutes next week be useful?"
     fake.replies.append({"subject": "A note on booking", "body": body})
     r = sdr.post(f"/lead/{lead['id']}/write", data={"what": "email"}, follow_redirects=False)

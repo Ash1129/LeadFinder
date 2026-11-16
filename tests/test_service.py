@@ -56,11 +56,62 @@ def test_overview_and_leads_render_in_the_house_style(sdr):
     assert "data-sortable" in leads and 'aria-current="page"' in leads
 
 
-def test_lead_page_shows_reasons_facts_and_the_draft(app, sdr):
+def write_email(client, lead_id: int) -> str:
+    """Press the button that writes the lead's first email; the page that comes back."""
+    r = client.post(f"/lead/{lead_id}/write", data={"what": "email"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith("wrote=email")
+    return client.get(f"/lead/{lead_id}").text
+
+
+def test_lead_page_shows_reasons_and_facts(app, sdr):
     lead_id = first_new_lead(app)
     page = sdr.get(f"/lead/{lead_id}").text
     assert "every point and its source" in page and "NPI record" in page and "synthetic" in page
-    assert 'name="subject"' in page and "Approve the email" in page
+
+
+def test_no_lead_has_an_email_until_someone_asks_for_one(app, sdr):
+    conn = app.state.conn
+    assert conn.execute("SELECT COUNT(*) n FROM leads WHERE subject != '' OR body != '' OR written_by != ''").fetchone()["n"] == 0
+    lead_id = first_new_lead(app)
+    page = sdr.get(f"/lead/{lead_id}").text
+    assert "not written yet" in page and "Write the email</button>" in page
+    assert 'name="subject"' not in page and "Approve the email" not in page and "guardrail would stop" not in page
+    assert "0 emails written" in sdr.get("/").text
+    page = write_email(sdr, lead_id)
+    assert 'name="subject"' in page and "Approve the email" in page and "drafted, waiting for you" in page
+    row = conn.execute("SELECT subject, body, written_by FROM leads WHERE id=?", (lead_id,)).fetchone()
+    assert row["subject"] and row["body"] and row["written_by"] == "template"
+    assert conn.execute("SELECT COUNT(*) n FROM leads WHERE body != ''").fetchone()["n"] == 1
+    assert "1 email written" in sdr.get("/").text
+
+
+def test_a_lead_can_be_rejected_without_an_email(app, sdr):
+    lead_id = first_new_lead(app)
+    seen = form_value(sdr.get(f"/lead/{lead_id}").text, "seen")
+    r = sdr.post(f"/lead/{lead_id}/reject", data={"reason": "fit", "seen": seen}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"].endswith("done=rejected")
+    page = sdr.get(f"/lead/{lead_id}").text
+    assert "none written: rejected" in page and "No email was written for this lead" in page
+
+
+def test_an_approval_needs_an_email(app, sdr):
+    lead_id = first_new_lead(app)
+    seen = form_value(sdr.get(f"/lead/{lead_id}").text, "seen")
+    r = sdr.post(f"/lead/{lead_id}/approve", data={"subject": "", "body": "", "seen": seen})
+    assert r.status_code == 422 and "guardrail stopped" in r.text
+    assert app.state.conn.execute("SELECT status FROM leads WHERE id=?", (lead_id,)).fetchone()["status"] == "new"
+
+
+def test_how_it_works_page_and_its_place_in_the_sidebar(app, sdr, manager):
+    home = sdr.get("/").text
+    assert '<a class="nav" href="/how">How it works</a>' in home
+    page = sdr.get("/how")
+    assert page.status_code == 200 and '<a class="nav" href="/how" aria-current="page">How it works</a>' in page.text
+    text = page.text
+    assert "The path of a lead" in text and "40 practices" in text and "0 emails written" in text and "Write the email" in text
+    assert 'class="kicker"' in text and 'class="fnotes"' in text and "What is real today" in text
+    assert 'href="/audit"' not in text.split("<main")[1] and 'href="/audit"' in manager.get("/how").text.split("<main")[1]
+    assert sdr.get("/how", follow_redirects=False).status_code == 200 and TestClient(app).get("/how", follow_redirects=False).status_code == 303
 
 
 def test_sdr_cannot_open_the_audit_log_but_the_manager_can(sdr, manager):
@@ -75,7 +126,7 @@ def test_missing_lead_is_a_404(sdr):
 # ---------------- deciding ----------------
 def test_approve_logs_the_decision_and_the_edit(app, sdr, manager):
     lead_id = first_new_lead(app)
-    page = sdr.get(f"/lead/{lead_id}").text
+    page = write_email(sdr, lead_id)
     seen = form_value(page, "seen")
     subject = form_value(page, "subject") + " (edited)"
     body = app.state.conn.execute("SELECT body FROM leads WHERE id=?", (lead_id,)).fetchone()["body"]

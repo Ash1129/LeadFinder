@@ -84,12 +84,13 @@
     </section>
 
     <section class="sec">
-      <h2 id="ld-draft" class="kicker">The first email · {{ 'approved' if d.status == 'approved' else ('not sent: rejected' if d.status == 'rejected' else 'drafted, waiting for you') }}{% call note('draft-note', 'What the guardrail checks') %}<span class="ln">Before an approval lands, the words are checked: no patient information, no claims the seller cannot back (a guarantee, "HIPAA certified"), and the footer with the postal address and the opt-out still there (CAN-SPAM).</span><span class="ln">It goes to the practice's business address only.</span><span class="ln">{% if writer.is_model %}Claude sees the practice's public record, its visits and the score's reasons, nothing else. Its draft is kept only if it passes the same checks and names no EHR or provider count that is not on the record; the footer is added by code.{% else %}No Claude credential is set, so drafts come from the template. Set ANTHROPIC_API_KEY and restart to have Claude write them.{% endif %}</span>{% endcall %}</h2>
+      <h2 id="ld-draft" class="kicker">The first email · {% if d.status == 'approved' %}approved{% elif d.status == 'rejected' %}{{ 'not sent: rejected' if drafted else 'none written: rejected' }}{% else %}{{ 'drafted, waiting for you' if drafted else 'not written yet' }}{% endif %}{% call note('draft-note', 'What the guardrail checks') %}<span class="ln">Before an approval lands, the words are checked: no patient information, no claims the seller cannot back (a guarantee, "HIPAA certified"), and the footer with the postal address and the opt-out still there (CAN-SPAM).</span><span class="ln">It goes to the practice's business address only.</span><span class="ln">{% if writer.is_model %}Claude sees the practice's public record, its visits and the score's reasons, nothing else. Its draft is kept only if it passes the same checks and names no EHR or provider count that is not on the record; the footer is added by code.{% else %}No Claude credential is set, so the email is filled in from a template. Set ANTHROPIC_API_KEY and restart to have Claude write it.{% endif %}</span>{% endcall %}</h2>
       {% if d.status == 'new' and can.act_on_leads %}
+      {% if drafted %}
       <form class="byline" method="post" action="/lead/{{ d.id }}/write">
         <input type="hidden" name="what" value="email">
         <p class="small muted">Written by {{ 'Claude' if d.written_by == 'claude' else 'the template' }}.</p>
-        {% if writer.is_model %}<button class="btn" type="submit" data-busy="Claude is writing…">{{ 'Have Claude write it again' if d.written_by == 'claude' else 'Have Claude write it' }}</button>{% endif %}
+        {% if writer.is_model %}<button class="btn" type="submit" data-busy="Claude is writing…">Have Claude write it again</button>{% endif %}
       </form>
       <form class="draft" method="post" action="/lead/{{ d.id }}/approve">
         <input type="hidden" name="seen" value="{{ token }}">
@@ -99,17 +100,26 @@
         {% if problems and not blocked %}<p class="notice warn"><b>The guardrail would stop this.</b> {{ problems|join('; ') }}.</p>{% endif %}
         <div class="actions"><button class="btn primary" type="submit" data-busy="Approving…">Approve the email</button></div>
       </form>
+      {% else %}
+      <form class="byline" method="post" action="/lead/{{ d.id }}/write">
+        <input type="hidden" name="what" value="email">
+        <p class="small muted">No email is written until you ask for one. {% if writer.is_model %}Claude writes it from this practice's public record, its visits and the reasons above{% else %}It is filled in from a template, using this practice's public record and the reasons above{% endif %}; you read it, edit it if you like, and approve it before it counts as ready to send.</p>
+        <button class="btn primary" type="submit" data-busy="{{ 'Claude is writing…' if writer.is_model else 'Writing…' }}">{{ 'Have Claude write the email' if writer.is_model else 'Write the email' }}</button>
+      </form>
+      {% endif %}
       <form class="reject" method="post" action="/lead/{{ d.id }}/reject">
         <input type="hidden" name="seen" value="{{ token }}">
-        <div class="field"><label for="reason">Or reject the lead</label>
+        <div class="field"><label for="reason">{{ 'Or reject the lead' if drafted else 'Or reject the lead without an email' }}</label>
           <select id="reason" name="reason" required>{% for k, v in reject_reasons.items() %}<option value="{{ k }}">{{ v|capitalize }}</option>{% endfor %}</select></div>
         <div class="field"><label for="note">Note (optional)</label><input id="note" name="note" maxlength="500"></div>
         <button class="btn" type="submit" data-busy="Rejecting…">Reject</button>
       </form>
-      {% else %}
+      {% elif drafted %}
       <p class="small muted">To {{ d.contact_name }} &lt;{{ d.contact_email }}&gt;</p>
       <p><b>{{ d.subject }}</b></p>
       <p class="draft-body">{{ d.body }}</p>
+      {% else %}
+      <p class="muted">No email {{ 'was written for this lead' if d.status != 'new' else 'has been written for this lead yet' }}.</p>
       {% endif %}
     </section>
 

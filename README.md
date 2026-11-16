@@ -2,9 +2,9 @@
 
 An AI lead finder for health-tech sales to independent medical practices. Website visits and an NPI-style practice
 record go into a trained model that gives each practice a chance of converting, with what moved that chance shown
-line by line, and into a hand-set points table kept beside it for comparison. A first email is drafted from
-public business facts only, with a call brief beside it, and an SDR approves, edits or rejects the email, with every
-decision logged. Nothing is sent from the app; an approval marks the email ready to send.
+line by line, and into a hand-set points table kept beside it for comparison. Each lead has a call brief, and no
+email until an SDR asks for one with a button; it is then written from public business facts only, and the SDR
+approves, edits or rejects it, with every decision logged. The How it works page walks through the five steps. Nothing is sent from the app; an approval marks the email ready to send.
 
 Leads are ranked by the trained model, a logistic regression (`src/leadfinder/ml.py`). There are no real sales
 outcomes yet, so it learns from a simulated history (`src/leadfinder/synth.py`): 8,000 made-up past leads, each won
@@ -30,7 +30,7 @@ python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
 
 Open http://127.0.0.1:8010. The first start takes a few seconds while the model is trained; after that it is read
 from the database. On first start an empty `data/leadfinder.db` is also filled with 40 synthetic practices, their
-visits, their scored leads and drafts, and the demo logins listed on the login page (`riley` and `jo` are SDRs,
+visits, their scored leads and call briefs (no emails: those are written on request), and the demo logins listed on the login page (`riley` and `jo` are SDRs,
 `morgan` is the sales manager; the password is `leadfinder`). Set `LEADFINDER_DEMO=0` to start empty instead.
 
 To have Claude write the emails and call briefs, put `ANTHROPIC_API_KEY=...` in a `.env` file beside `asgi.py`

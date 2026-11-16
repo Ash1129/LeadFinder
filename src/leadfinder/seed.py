@@ -46,7 +46,7 @@ def _npi(rng: random.Random) -> str:
 
 def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None = None) -> dict:
     """Fill an empty database with `n` practices, their visits over the last three weeks, and a scored lead with a
-    drafted email for each. Returns counts. Does nothing if practices exist already."""
+    call brief for each (no email: that is written on request). Returns counts. Does nothing if practices exist already."""
     if conn.execute("SELECT COUNT(*) n FROM practices").fetchone()["n"]:
         return {"practices": 0, "visits": 0, "leads": 0}
     rng = random.Random(seed)
@@ -75,8 +75,8 @@ def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None
 
 
 def score_all(conn: sqlite3.Connection, now: float | None = None) -> int:
-    """Score every practice that has no lead yet and write its first email and call brief from the templates
-    (a person asks Claude for a rewrite from the lead's page, one lead at a time)."""
+    """Score every practice that has no lead yet and write its call brief from the template. No email is written
+    here: a lead starts without one, and gets its first when a person asks for it on the lead's page."""
     now = time.time() if now is None else now
     writer = Offline()
     made = 0
@@ -85,10 +85,9 @@ def score_all(conn: sqlite3.Connection, now: float | None = None) -> int:
         s = score_practice(p["specialty"], p["providers"], p["ehr"], visits, now=now)
         reasons = [r.as_dict() for r in s.reasons]
         pages = [page for page, _ in visits]
-        subject, body = writer.email(dict(p), reasons, pages)
         conn.execute("INSERT INTO leads(practice_id, score, band, reasons, subject, body, status, scored_at, written_by, brief, brief_by) "
-                     "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                     (p["id"], s.total, s.band, json.dumps(reasons), subject, body, "new", now, writer.name,
+                     "VALUES(?,?,?,?,'','',?,?,'',?,?)",
+                     (p["id"], s.total, s.band, json.dumps(reasons), "new", now,
                       json.dumps(writer.brief(dict(p), reasons, pages)), writer.name))
         made += 1
     return made

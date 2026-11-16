@@ -1,0 +1,127 @@
+{% extends "base.html" %}{% block title %}How it works{% endblock %}
+{% from "_notes.html" import note %}
+{% block style %}
+.hw-head{display:flex;flex-direction:column;gap:8px}.hw-head p{margin:0}
+.hw-sec{display:flex;flex-direction:column;gap:12px}.hw-sec p{margin:0;max-width:760px}
+.hw-sec>h2 .info-box{right:auto;width:560px;max-width:calc(100vw - 32px)}
+.hw-path{list-style:none;margin:0;padding:0;counter-reset:step;max-width:920px}
+.hw-path>li{counter-increment:step;display:grid;grid-template-columns:40px minmax(0,1fr) max-content;gap:6px 16px;padding:16px 0;border-top:1px solid var(--line)}
+.hw-path>li:last-child{border-bottom:1px solid var(--line)}
+.hw-path>li::before{content:counter(step, upper-roman);font-family:var(--heading);font-size:22px;line-height:24px;color:var(--accentInk)}
+.hw-path b{font-weight:600}
+.hw-by{font-size:13px;line-height:18px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-left:8px;white-space:nowrap}
+.hw-what{display:block;margin-top:2px}
+.hw-io{display:block;margin-top:6px;font-size:14px;line-height:20px;color:var(--muted)}
+.hw-path .num{align-self:start;white-space:nowrap}
+.hw-facts{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:0 32px;max-width:860px}
+.hw-facts dt,.hw-facts dd{padding:10px 0;border-top:1px solid var(--line);margin:0}
+.hw-facts dt{color:var(--muted)}
+.hw-table{min-width:640px;max-width:920px}
+.hw-table td{padding:12px 16px 12px 0;vertical-align:top}.hw-table td:last-child,.hw-table th:last-child{padding-right:0}
+.hw-table td:first-child{font-weight:600;white-space:nowrap}
+@media (max-width:640px){.hw-facts{grid-template-columns:1fr}.hw-facts dd{border-top:0;padding-top:0}.hw-path>li{grid-template-columns:32px minmax(0,1fr)}.hw-path .num{grid-column:2}}
+{% endblock %}
+{% block body %}
+<header class="hw-head">
+  <p class="kicker">How it works</p>
+  <h1 class="title">Code finds and ranks the practices; a person asks for each email and approves it</h1>
+  <p class="muted">Five steps from a visit to the site to an email marked ready to send · nothing is sent from here<sup class="fn"><a href="#fn-send" aria-label="footnote 1">1</a></sup></p>
+</header>
+
+<hr class="rule">
+
+<section class="hw-sec">
+  <h2 id="hw-path" class="kicker">The path of a lead · five steps{% call note('path-note', 'Who does each step') %}<span class="ln">Code: fixed rules, the same answer every time. Model: the trained scorer, a logistic regression. Claude: the language model, used only for words and only when asked. Person: an SDR, who decides.</span><span class="ln">The count on the right is how far the leads in this database have come.</span>{% endcall %}</h2>
+  <ol class="hw-path">
+    <li>
+      <div><b>A practice visits the site</b><span class="hw-by">Code</span>
+        <span class="hw-what">Each visit is tied to a practice: which page, and when. The demo and pricing pages say more than the blog.</span>
+        <span class="hw-io">Reads the visit log · gives the pages seen and how lately</span></div>
+      <span class="num">{{ '{:,}'.format(stages.visits) }} visits</span>
+    </li>
+    <li>
+      <div><b>The practice is looked up</b><span class="hw-by">Code</span>
+        <span class="hw-what">Its registry record is attached: specialty, number of providers, city and state, the EHR it runs, and a business contact<sup class="fn"><a href="#fn-npi" aria-label="footnote 2">2</a></sup>.</span>
+        <span class="hw-io">Reads the NPI-style record · gives public business facts, nothing about patients</span></div>
+      <span class="num">{{ stages.practices }} practices</span>
+    </li>
+    <li>
+      <div><b>The lead is scored</b><span class="hw-by">Model</span>
+        <span class="hw-what">A trained model turns those facts into a chance of converting and lists what pushed it up or down. A hand-set points table scores the same facts beside it.</span>
+        <span class="hw-io">Reads the record and the visits · gives a chance, a band (hot, warm, cool) and the reasons</span></div>
+      <span class="num">{{ stages.scored }} scored</span>
+    </li>
+    <li>
+      <div><b>The email is written, when asked</b><span class="hw-by">{{ 'Claude' if writer.is_model else 'Code' }}</span>
+        <span class="hw-what">A lead has no email until an SDR presses the button on its page. {% if writer.is_model %}Claude then writes one from the practice's record, its visits and the score's reasons, and code checks the words before they are kept.{% else %}The email is then filled in from a template, using the practice's record and the score's reasons; with a Claude credential set, Claude writes it instead.{% endif %} A call brief is there from the start.</span>
+        <span class="hw-io">Reads the same public facts and the reasons · gives a subject and a body the SDR can edit</span></div>
+      <span class="num">{{ stages.emails }} email{{ 's' if stages.emails != 1 }} written</span>
+    </li>
+    <li>
+      <div><b>A person decides</b><span class="hw-by">Person</span>
+        <span class="hw-what">The SDR reads the email, edits it or not, and approves it, or rejects the lead with a reason. A guardrail checks the words before an approval lands, and the decision goes into the audit log.</span>
+        <span class="hw-io">Reads everything above · gives an approved email, or a rejection and why</span></div>
+      <span class="num">{{ stages.decided }} decided</span>
+    </li>
+  </ol>
+</section>
+
+<section class="hw-sec">
+  <h2 id="hw-score" class="kicker">Scoring · two scorers on the same facts</h2>
+  <p>Every lead gets two scores, and both show their working on the lead's page.</p>
+  <dl class="hw-facts">
+    <dt>The trained model</dt><dd>{% if model %}A {{ model.kind }} ({{ model.version }}) that gives each lead a chance of converting. It ranks the list. Each fact about the practice moves the chance up or down by an amount that is shown, and the amounts add up to the prediction exactly.{% else %}Not trained yet; the points table ranks the list.{% endif %}</dd>
+    <dt>The points table</dt><dd>Set by hand: so many points for the specialty, the size, the EHR and each page visited, capped at 100. It is kept beside the model so a rep can see where the two disagree.</dd>
+    <dt>What both see</dt><dd>Specialty, number of providers, EHR, the pages visited and whether a visit was in the last 7 days. Nothing else.</dd>
+    <dt>What the model learned from</dt><dd>A simulated history, because there are no real outcomes yet<sup class="fn"><a href="#fn-sim" aria-label="footnote 3">3</a></sup>. <a href="/model">The benchmark and every weight</a>.</dd>
+  </dl>
+</section>
+
+<section class="hw-sec">
+  <h2 id="hw-write" class="kicker">Writing · only when a person asks{% call note('write-note', 'Why the email waits for a button') %}<span class="ln">An email nobody asked for is words nobody has read. Writing on request means every email on a lead's page is one a person wanted, and a lead that is going to be rejected never gets one.</span>{% endcall %}</h2>
+  <dl class="hw-facts">
+    <dt>When</dt><dd>When the SDR presses “{{ 'Have Claude write the email' if writer.is_model else 'Write the email' }}” on a lead's page. Until then the lead has no email. The call brief starts as a template{{ ' and Claude rewrites it on request' if writer.is_model else '' }}.</dd>
+    <dt>Who writes</dt><dd>{% if writer.is_model %}Claude, the language model. Without a credential the same button fills a template.{% else %}A template, because no Claude credential is set. Set ANTHROPIC_API_KEY and restart, and Claude writes it.{% endif %}</dd>
+    <dt>What the writer is given</dt><dd>The practice's name, specialty, number of providers, city, state and EHR, the contact's name, the pages visited, and the score's reasons.</dd>
+    <dt>What it is never given</dt><dd>The contact's email address, the NPI, or anything about patients. None of that is needed to write the words.</dd>
+    <dt>What code checks</dt><dd>No patient information; no claim the seller cannot back, such as a guarantee or “HIPAA certified”; no EHR and no number of providers that is not on the practice's record. Words that fail are not kept, and the page says why.</dd>
+    <dt>What code adds</dt><dd>The footer with the postal address and the way to opt out, which CAN-SPAM requires. The model does not write it.</dd>
+  </dl>
+</section>
+
+<section class="hw-sec">
+  <h2 id="hw-decide" class="kicker">The decision · a person's, and logged</h2>
+  <dl class="hw-facts">
+    <dt>Approve</dt><dd>The SDR may edit the subject and the body first. What is approved is what they left on the page, and the log keeps that it was edited. The guardrail runs on those words before the approval lands: no patient information, no claim the seller cannot back, the footer still in place.</dd>
+    <dt>Reject</dt><dd>With one of {{ reject_reasons|length }} reasons ({{ reject_reasons.values()|join('; ') }}) and an optional note. A lead can be rejected without ever having an email written.</dd>
+    <dt>Two people, one lead</dt><dd>If someone else decides a lead while it is open on your screen, your decision is refused and the page shows theirs.</dd>
+    <dt>The audit log</dt><dd>Every approval and rejection: who, when, the chance and the points that were on screen, whether the email was edited, and who wrote it. The sales manager reads it{% if can.view_audit %} <a href="/audit">here</a>{% endif %}.</dd>
+    <dt>Who sees what</dt><dd>SDRs see the leads and decide them. The sales manager sees all of that and the audit log.</dd>
+  </dl>
+</section>
+
+<section class="hw-sec">
+  <h2 id="hw-real" class="kicker">What is real today · and what is planned</h2>
+  <div class="scroll">
+    <table class="hw-table">
+      <thead><tr><th scope="col">Part</th><th scope="col">Today</th><th scope="col">Planned</th></tr></thead>
+      <tbody>
+        <tr><td>Practices</td><td>Made up, with the registry's fields and an NPI that passes the check digit</td><td>Looked up in the NPPES registry</td></tr>
+        <tr><td>Visits</td><td>Made up, over the last three weeks</td><td>Read from the site's visitor-tracking tool</td></tr>
+        <tr><td>The model's training</td><td>A simulated history of won and lost leads</td><td>Retrained on what SDRs approved and rejected</td></tr>
+        <tr><td>The benchmark</td><td>The model, the points table and a second model, on the same held-out leads</td><td>Claude's own ranking of those leads, as a fourth row</td></tr>
+        <tr><td>Writing</td><td>{{ 'Claude, on request, checked by code' if writer.is_model else 'A template, on request; Claude once a credential is set' }}</td><td>The same</td></tr>
+        <tr><td>Sending</td><td>Off: an approval marks the email ready to send</td><td>A person's mail tool sends what was approved</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="footnote">
+  <ol class="fnotes">
+    <li id="fn-send">This service has no way to send mail. An approved email is marked ready to send and stays on the lead's page.</li>
+    <li id="fn-npi">Synthetic: each practice is made up, its NPI is a random number with a valid check digit, and its address uses the reserved .example domain. Only a business contact is kept.</li>
+    <li id="fn-sim">The outcomes the model learned from are drawn from a rule the simulator keeps to itself. The percentages rank leads against each other; none is a forecast of real conversion.</li>
+  </ol>
+</footer>
+{% endblock %}

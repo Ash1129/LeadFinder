@@ -2,11 +2,13 @@
 
 - Overview: what is waiting, the best leads not yet decided, and how the agents hand a lead along.
 - Leads: every scored practice, by status, sortable.
-- A lead: the practice's facts with their source, the score's reasons, the visits, the call brief, and the drafted
-  email, which the SDR may edit and then approve, or reject with a reason. The email and the brief start as
-  templates; with a Claude credential set, the SDR can have Claude write either one, and code checks what comes
-  back before it is kept (writer.py). Nothing is sent from here; an approval marks the email ready to send and is
-  logged with the score and reasons that were on screen and with who wrote the words.
+- A lead: the practice's facts with their source, the score's reasons, the visits, the call brief, and the first
+  email. A lead starts with no email: the SDR asks for one with a button, may edit it and then approve it, or
+  rejects the lead with a reason. The brief starts as a template. With a Claude credential set, Claude writes the
+  email and can rewrite the brief, and code checks what comes back before it is kept (writer.py); without one the
+  button fills the template. Nothing is sent from here; an approval marks the email ready to send and is logged
+  with the score and reasons that were on screen and with who wrote the words.
+- How it works: the path of a lead in five steps, who does each, and what is real today.
 - Audit log (manager): every approval and rejection, who made it and what they saw.
 """
 from __future__ import annotations
@@ -104,6 +106,14 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
             raise HTTPException(403, f"your role ({me.role_word}) cannot do this")
         return me
 
+    def stages() -> dict:
+        """How far along the path the leads are: the counts beside each step on the overview and on How it works."""
+        one = lambda sql: conn.execute(sql).fetchone()["n"]                                             # noqa: E731
+        return {"visits": one("SELECT COUNT(*) n FROM visits"), "visited": one("SELECT COUNT(DISTINCT practice_id) n FROM visits"),
+                "practices": one("SELECT COUNT(*) n FROM practices"), "scored": one("SELECT COUNT(*) n FROM leads"),
+                "emails": one("SELECT COUNT(*) n FROM leads WHERE body != ''"), "briefs": one("SELECT COUNT(*) n FROM leads WHERE brief IS NOT NULL"),
+                "decided": one("SELECT COUNT(*) n FROM leads WHERE status != 'new'")}
+
     def lead_row(lead_id: int):
         row = conn.execute("SELECT l.*, p.npi, p.name, p.specialty, p.providers, p.city, p.state, p.ehr, p.contact_name, "
                            "p.contact_email, p.source, l.band AS points_band, COALESCE(l.chance_band, l.band) AS shown_band "
@@ -122,7 +132,9 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         visits = [dict(r) for r in conn.execute("SELECT page, at FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
         history = [dict(r) for r in conn.execute("SELECT a.*, s.name who FROM audit a LEFT JOIN staff s ON s.username = a.username "
                                                  "WHERE a.lead_id=? ORDER BY a.at DESC", (d["id"],))]
-        base = dict(nav="leads", d=d, visits=visits, history=history, problems=outreach.check(d["subject"], d["body"]),
+        drafted = bool(d["subject"] or d["body"])       # a lead has no email until someone asks for one
+        base = dict(nav="leads", d=d, visits=visits, history=history, drafted=drafted,
+                    problems=outreach.check(d["subject"], d["body"]) if drafted else [],
                     token=lead_token(conn, d["id"]), reject_reasons=REJECT_REASONS, stale=False, done="", wrote="",
                     write_error="", blocked=False, now=time.time())
         return TEMPLATES.TemplateResponse(request, "lead.html", ctx(request, **(base | kw)), status_code=status_code)
@@ -166,14 +178,14 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         top = [why(r) for r in conn.execute(
             f"SELECT l.id, l.score, {SHOWN}, l.chance, l.chance_reasons, l.reasons, p.name, p.specialty, p.providers, p.city, p.state "
             f"FROM leads l JOIN practices p ON p.id = l.practice_id WHERE l.status='new' ORDER BY {RANK} LIMIT 8")]
-        stages = {
-            "practices": conn.execute("SELECT COUNT(*) n FROM practices").fetchone()["n"],
-            "visits": conn.execute("SELECT COUNT(*) n FROM visits").fetchone()["n"],
-            "visited": conn.execute("SELECT COUNT(DISTINCT practice_id) n FROM visits").fetchone()["n"],
-            "scored": sum(counts.values()),
-        }
         return TEMPLATES.TemplateResponse(request, "overview.html", ctx(request, nav="overview", counts=counts, hot=hot, top=top,
-                                                                        stages=stages, now=time.time()))
+                                                                        stages=stages(), now=time.time()))
+
+    @app.get("/how", response_class=HTMLResponse)
+    def how(request: Request):
+        allow(request, "view_leads")
+        return TEMPLATES.TemplateResponse(request, "how.html", ctx(request, nav="how", stages=stages(),
+                                                                   reject_reasons=REJECT_REASONS))
 
     @app.get("/leads", response_class=HTMLResponse)
     def leads(request: Request, status: str = "new"):
