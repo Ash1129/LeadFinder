@@ -25,29 +25,49 @@ as AuxoCase (the palette and type of ashwinprajeeth.com, light and dark themes),
 
 **The brainstorm describes a target pipeline, not the current end-to-end application.** This checkout is a working
 lead-scoring and human-reviewed outreach prototype. A bounded prospect-research module now exists in
-`src/leadfinder/research.py`, but it is not wired into the app or LangGraph and has no real practice-directory
-adapter. The visit-intent gate and persona-based evaluation simulator are also not implemented. Do not present the
-standalone research module as a live end-to-end workflow.
+`src/leadfinder/research.py`, and standalone visit features and a deterministic intent gate now exist in
+`src/leadfinder/visit_analysis.py`. Neither module is wired into the app or LangGraph; the research module has no
+real practice-directory adapter, and visit analysis relies on a caller to provide already-scrubbed data. Do not
+present these standalone modules as a live end-to-end workflow.
 
 ### Owner handoff
 
 - **Daniel (@Dami047) — data:** implement the `PracticeDirectory` adapter in `research.py`; confirm stable IDs,
-  fields/provenance, matching cutoff, and website-domain quality.
-- **Sasha (@Sasha-Shkolnikov) — visit analysis:** implement deterministic features and the gate before research.
-  Proposed: require identification confidence >=0.5, then pass on a high-tier page, >=2 evaluation criteria, or
-  repeat/deep medium-tier engagement.
-- **Hanna (@hannamlt) — evaluation:** confirm simulator ownership and separate ground truth; measure gate recall,
-  false passes, and match accuracy. Keep labels out of `ResearchResult` and lead state.
-- **Ashwin (@Ash1129) — scoring:** consume `ResearchResult.as_dict()`; decide how unknown EHR, partial research,
-  and ambiguous candidates affect scores and reasons.
+  fields/provenance, matching cutoff, and website-domain quality. The current research match cutoffs are heuristics,
+  not calibrated probabilities.
+- **Sasha (@Sasha-Shkolnikov) — visit analysis:** standalone deterministic features and gate are in
+  `src/leadfinder/visit_analysis.py`; the taxonomy, thresholds, and inferred hints are provisional. Review and
+  revise them with Hanna's ground truth, then integrate only after the scrubbed visit-data contract is agreed.
+- **Hanna (@hannamlt) — evaluation:** confirm simulator ownership and separate ground truth; evaluate gate recall,
+  false passes, taxonomy coverage, and match accuracy, then send findings to Sasha/Daniel for revisions. Keep
+  labels out of `ResearchResult` and lead state.
+- **Ashwin (@Ash1129) — scoring:** agree on the shared lead-state fields with Sasha, Daniel, and Mahika; decide
+  whether/how to consume inferred visit hints and research facts, and how unknown EHR, partial research, and
+  ambiguous candidates affect scores and reasons.
 - **Gabriel (@gabrielmaurad) — outreach:** use sourced research facts; confirm draft checks/revisions and approval
   feedback. Sending stays disabled until its owner and provider are agreed.
 - **Mahika (@ma2255-cu) — orchestration:** wire the gate and `ResearchAgent` into LangGraph; define checkpointing,
-  traces, retries, and routing for `partial`/`failed` results. Do not duplicate the research loop.
+  traces, retries, and routing for `partial`/`failed` results after owners confirm the input/output contracts. Do
+  not duplicate the research loop.
 
-**Dependency order:** agree on schemas/data contract -> build the directory adapter and gate -> wire the graph ->
-connect scoring/outreach -> evaluate and document results. Full questions and rubric evidence are in
+**Dependency order:** confirm privacy and shared schemas -> provide the real directory adapter and revise the
+standalone gate from evaluation evidence -> wire the graph -> connect scoring/outreach -> evaluate and document
+results. These modules are deliberately not frozen contracts; the named owners should update their assumptions
+and tests as real data and evaluation decisions arrive. Full questions and rubric evidence are in
 [docs/architecture-and-rubric.md](./docs/architecture-and-rubric.md).
+
+### Provisional choices to revisit
+
+- **Visits and privacy:** `visit_analysis.py` assumes opaque view IDs, one lead/visitor's events, and already
+  allowlisted, scrubbed company-level inputs. `patient_data_stripped` is only a caller assertion, not a scrubber.
+  Agree on identity, fields, retention, and upstream scrubbing before connecting real visits.
+- **Gate and inferred hints:** the 30-day lookback, 30-minute session timeout, 0.5 identification cutoff, page
+  taxonomy, criteria, and owner/administrator heuristics are starting values. Hanna's persona evaluation should
+  drive Sasha's revisions; Ashwin should decide whether inferred role/EHR/specialty/product hints belong in scoring.
+- **Research and shared state:** `research.py` uses provisional match heuristics (0.85 match, 0.45 ambiguity,
+  0.10 margin), a 10-call cap, and homepage-only EHR evidence. Daniel should confirm or replace matching/data
+  assumptions; Ashwin and Mahika should agree on the shared state and treatment of partial/ambiguous results.
+  See the architecture handoff for the detailed owner-by-owner update points.
 
 ## Run it
 
@@ -87,18 +107,22 @@ next version and put it to the scorecard:
 | `src/leadfinder/writer.py` | who writes the email and the call brief: Claude through the Anthropic SDK, or the templates |
 | `src/leadfinder/seed.py` | synthetic practices with valid-format NPIs, and their visits |
 | `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
+| `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate; standalone, not app-wired |
+| `tests/test_visit_analysis.py` | focused feature, gate, privacy-boundary, and serialization tests |
 | `src/leadfinder/auth.py` | accounts, roles (SDR, sales manager), scrypt passwords, sessions |
 | `src/leadfinder/service/` | the app, the security middleware and headers, the templates, `static/app.js` |
 
 ## Not built yet (from the proposal)
 
-- The brainstorm's LangGraph pipeline: visit features and recall-oriented gate, post-gate intent summary and
-  orchestration of prospect research, cross-check, parallel scorers, checked/revised outreach, and saved human
-  approval. The research loop exists as a standalone module, but the existing app is not an agent orchestrator.
+- The brainstorm's LangGraph pipeline: integration of standalone visit features and recall-oriented gate,
+  post-gate intent summary and orchestration of prospect research, cross-check, parallel scorers, checked/revised
+  outreach, and saved human approval. The research and visit-analysis modules exist standalone, but the existing
+  app is not an agent orchestrator.
 - Enrichment from the real NPPES registry instead of `seed.py`.
 - Daniel's concrete directory adapter and confirmed data/matching contract for `research.py`; the module cannot look
   up a real practice until that adapter is supplied.
-- Sessionized, persona-based visit simulation with a separate ground-truth file and healthcare page taxonomy.
+- Persona-based visit simulation with a separate ground-truth file. The standalone visit-analysis module includes
+  an initial healthcare page taxonomy and configurable thresholds, but these have not been evaluated or integrated.
 - Real outcomes: the model's labels are simulated, and SDR approvals and rejections do not retrain it yet.
 - The LLM-judgment row of the benchmark (Claude ranking the same held-out leads).
 - Integration of the standalone research module into an application workflow; its website fetcher is limited to a
