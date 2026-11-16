@@ -1,0 +1,10 @@
+# What `vercel deploy` from this folder leaves out: the database is made in /tmp on a cold start (see asgi.py).
+# Anchored with / so a code folder of the same name still goes.
+/.venv
+/data
+/tests
+/.claude
+/.pytest_cache
+/.env*
+!/.env.example
+**/__pycache__
