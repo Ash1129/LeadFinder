@@ -21,6 +21,34 @@ It is a FastAPI service with server-rendered Jinja2 pages and SQLite storage. Th
 as AuxoCase (the palette and type of ashwinprajeeth.com, light and dark themes), and their one script is
 `/assets/app.js` under a `script-src 'self'` policy.
 
+## Team handoff: brainstorm decisions and rubric
+
+**The brainstorm describes a target pipeline, not the current end-to-end application.** This checkout is a working
+lead-scoring and human-reviewed outreach prototype. A bounded prospect-research module now exists in
+`src/leadfinder/research.py`, but it is not wired into the app or LangGraph and has no real practice-directory
+adapter. The visit-intent gate and persona-based evaluation simulator are also not implemented. Do not present the
+standalone research module as a live end-to-end workflow.
+
+### Owner handoff
+
+- **Daniel (@Dami047) — data:** implement the `PracticeDirectory` adapter in `research.py`; confirm stable IDs,
+  fields/provenance, matching cutoff, and website-domain quality.
+- **Sasha (@Sasha-Shkolnikov) — visit analysis:** implement deterministic features and the gate before research.
+  Proposed: require identification confidence >=0.5, then pass on a high-tier page, >=2 evaluation criteria, or
+  repeat/deep medium-tier engagement.
+- **Hanna (@hannamlt) — evaluation:** confirm simulator ownership and separate ground truth; measure gate recall,
+  false passes, and match accuracy. Keep labels out of `ResearchResult` and lead state.
+- **Ashwin (@Ash1129) — scoring:** consume `ResearchResult.as_dict()`; decide how unknown EHR, partial research,
+  and ambiguous candidates affect scores and reasons.
+- **Gabriel (@gabrielmaurad) — outreach:** use sourced research facts; confirm draft checks/revisions and approval
+  feedback. Sending stays disabled until its owner and provider are agreed.
+- **Mahika (@ma2255-cu) — orchestration:** wire the gate and `ResearchAgent` into LangGraph; define checkpointing,
+  traces, retries, and routing for `partial`/`failed` results. Do not duplicate the research loop.
+
+**Dependency order:** agree on schemas/data contract -> build the directory adapter and gate -> wire the graph ->
+connect scoring/outreach -> evaluate and document results. Full questions and rubric evidence are in
+[docs/architecture-and-rubric.md](./docs/architecture-and-rubric.md).
+
 ## Run it
 
 ```bash
@@ -58,12 +86,22 @@ next version and put it to the scorecard:
 | `src/leadfinder/outreach.py` | the template email and the checks (no patient data, no claims we can't back, the CAN-SPAM footer, nothing off the record) |
 | `src/leadfinder/writer.py` | who writes the email and the call brief: Claude through the Anthropic SDK, or the templates |
 | `src/leadfinder/seed.py` | synthetic practices with valid-format NPIs, and their visits |
+| `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
 | `src/leadfinder/auth.py` | accounts, roles (SDR, sales manager), scrypt passwords, sessions |
 | `src/leadfinder/service/` | the app, the security middleware and headers, the templates, `static/app.js` |
 
 ## Not built yet (from the proposal)
 
+- The brainstorm's LangGraph pipeline: visit features and recall-oriented gate, post-gate intent summary and
+  orchestration of prospect research, cross-check, parallel scorers, checked/revised outreach, and saved human
+  approval. The research loop exists as a standalone module, but the existing app is not an agent orchestrator.
 - Enrichment from the real NPPES registry instead of `seed.py`.
+- Daniel's concrete directory adapter and confirmed data/matching contract for `research.py`; the module cannot look
+  up a real practice until that adapter is supplied.
+- Sessionized, persona-based visit simulation with a separate ground-truth file and healthcare page taxonomy.
 - Real outcomes: the model's labels are simulated, and SDR approvals and rejections do not retrain it yet.
 - The LLM-judgment row of the benchmark (Claude ranking the same held-out leads).
-- An LLM research agent that reads the practice's public web presence.
+- Integration of the standalone research module into an application workflow; its website fetcher is limited to a
+  candidate's HTTPS homepage and exact, locally extracted EHR cues.
+- Ingestion-time patient-data stripping, per-node traces/retries/review queues, draft revision/send-back, and
+  feedback-driven scoring. Existing outreach checks are not a substitute for the proposed ingestion guardrail.
