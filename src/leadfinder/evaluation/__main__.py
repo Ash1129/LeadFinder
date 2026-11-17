@@ -58,7 +58,7 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         mm2 = match_eval.match_metrics(inputs, truth, practices, extras, only_ids=passed)
 
     converters = sum(t.converted for t in truth)
-    lost_unidentified = m2["converters_by_outcome"].get("unidentified", 0)
+    unidentified_converters = m2["converter_failures"].get("unidentified", 0)
     mix = ", ".join(f"{k} {int(v * 100)}%" for k, v in PERSONA_MIX.items())
     identification_rates = ", ".join(
         f"{persona} {int(behavior['p_identified'] * 100)}%"
@@ -83,10 +83,15 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         f"{_pct(m2['recall_should_pass'])}; browser false passes from {_pct(m1['false_pass_rate_browsers'])} to "
         f"{_pct(m2['false_pass_rate_browsers'])}; page-category accuracy from {_pct(t1['accuracy'])} to "
         f"{_pct(t2['accuracy'])}. V2 is implemented; its 100% catalog accuracy is not a real-traffic result.",
-        f"3. **Identification is the main modeled bottleneck**: {lost_unidentified} of {converters} future converters "
-        f"({_pct(lost_unidentified / max(converters, 1))}) are blocked as unidentified in this simulation. "
-        f"Identification is sampled from assumed persona rates ({identification_rates}); these are not measured "
-        "tracking-tool results. No threshold change recovers them.",
+        f"3. **Identification is the main modeled bottleneck**: {unidentified_converters} of {converters} future "
+        f"converters ({_pct(unidentified_converters / max(converters, 1))}) have unresolved identity as their first "
+        "gate failure in this simulation. Those that otherwise meet the intent rule route to human review; the "
+        "rest stop. Identification is sampled from assumed persona rates "
+        f"({identification_rates}); these are not measured "
+        f"tracking-tool results. The v2 gate routes {m2['routing_outcomes'].get('human_review', 0)} of "
+        f"{n} simulated visitors to human review because they meet the intent rule but lack sufficient identity; "
+        "there is no persisted review queue. "
+        "Changing gate thresholds alone cannot supply the missing identity.",
         f"4. **Practice matching never picks the wrong practice** ({mm1['outcomes'].get('WRONG_match', 0)} wrong "
         "matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the "
         "location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never "
@@ -109,8 +114,14 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         "",
         *_persona_table(m2),
         "",
-        "Where simulated future converters end up (current v2 gate): "
-        + ", ".join(f"{k} {v}" for k, v in m1["converters_by_outcome"].items()) + ".",
+        "Current v2 route outcomes (simulated; no queue is implemented): "
+        + ", ".join(f"{route} {count}" for route, count in sorted(m2["routing_outcomes"].items())) + ".",
+        "",
+        "Routes for simulated future converters (current v2 gate): "
+        + ", ".join(f"{k} {v}" for k, v in m2["converters_by_route"].items()) + ".",
+        "",
+        "First gate failure reasons for simulated future converters: "
+        + ", ".join(f"{k} {v}" for k, v in m2["converter_failures"].items()) + ".",
         "",
         "## 2. Page taxonomy coverage",
         "",

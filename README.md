@@ -38,7 +38,9 @@ present these standalone modules as a live end-to-end workflow.
 - **Sasha (@Sasha-Shkolnikov) — visit analysis:** standalone deterministic features and gate are in
   `src/leadfinder/visit_analysis.py`; taxonomy v2 now handles content sections before slug keywords, common demo
   paths, and customer/specialty pages. Validate against representative real-site URLs and keep other thresholds
-  and inferred hints provisional; integrate only after the scrubbed visit-data contract is agreed.
+  and inferred hints provisional; integrate only after the scrubbed visit-data contract is agreed. For scrubbed
+  inputs, behavior-qualified unresolved/low-confidence visits emit `routing_decision=human_review`; low-intent
+  unresolved visits stop. Neither route passes an unverified practice to research.
 - **Hanna (@hannamlt) — evaluation:** the persona simulator and separate ground truth are now in
   `src/leadfinder/evaluation/`. Validate the persona/should-pass labels and the assumed identification rates;
   report gate recall, false passes, taxonomy coverage, and match accuracy to Sasha/Daniel. Keep labels out of
@@ -49,8 +51,8 @@ present these standalone modules as a live end-to-end workflow.
 - **Gabriel (@gabrielmaurad) — outreach:** use sourced research facts; confirm draft checks/revisions and approval
   feedback. Sending stays disabled until its owner and provider are agreed.
 - **Mahika (@ma2255-cu) — orchestration:** wire the gate and `ResearchAgent` into LangGraph; define checkpointing,
-  traces, retries, and routing for `partial`/`failed` results after owners confirm the input/output contracts. Do
-  not duplicate the research loop.
+  traces, retries, and routing for `human_review`, `partial`, and `failed` outcomes after owners confirm the
+  input/output contracts. Do not send unresolved identities to research or duplicate the research loop.
 
 **Dependency order:** confirm privacy and shared schemas -> provide the real directory adapter and revise the
 standalone gate from evaluation evidence -> wire the graph -> connect scoring/outreach -> evaluate and document
@@ -65,6 +67,11 @@ and tests as real data and evaluation decisions arrive. Full questions and rubri
   Agree on identity, fields, retention, and upstream scrubbing before connecting real visits. The simulator's
   identification rates are assumptions, not measured tracking coverage; do not raise them as a substitute for
   improving the real identity source.
+- **Unresolved identity routing:** the standalone result routes scrubbed, unidentified or low-confidence visits
+  to `human_review` only when their behavior meets the intent rule; otherwise they stop. Unsanitized visits always
+  stop, and qualified identified visits route to `research`. For review cases, `passes_threshold` remains false
+  and `threshold_reasons` records the behavioral evidence; consumers should route on `routing_decision`. This is
+  only a routing signal: there is no persisted queue, reviewer UI, or automatic identity-resolution step yet.
 - **Gate and inferred hints:** taxonomy v2 is implemented based on simulated URLs, but still needs representative
   real-site validation. The 30-day lookback, 30-minute session timeout, 0.5 identification cutoff, other gate
   rules, and owner/administrator heuristics remain provisional. Hanna's evaluation should drive Sasha's revisions;

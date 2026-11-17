@@ -38,6 +38,7 @@ def test_high_tier_page_passes_and_queries_are_not_in_feature_output():
     ]))
 
     assert result.passes_threshold
+    assert result.routing_decision == "research"
     assert result.threshold_reasons == ("high_tier_page", "criteria_breadth_2")
     assert result.max_intent_tier == result.intent_level == "high"
     assert result.criteria_breadth == 2
@@ -102,6 +103,7 @@ def test_low_tier_only_visits_fail_with_an_explainable_reason():
     ]))
 
     assert not result.passes_threshold
+    assert result.routing_decision == "stop"
     assert result.threshold_reasons == ()
     assert result.threshold_fail_reason == "only_low_tier_pages"
     assert result.page_category_counts["blog"] == 1
@@ -109,18 +111,33 @@ def test_low_tier_only_visits_fail_with_an_explainable_reason():
 
 
 @pytest.mark.parametrize(
-    ("overrides", "reason"),
+    ("overrides", "reason", "route"),
     [
-        ({"company_identified": False}, "unidentified"),
-        ({"identification_confidence": 0.49}, "low_identification"),
-        ({"patient_data_stripped": False}, "patient_data_not_scrubbed"),
+        ({"company_identified": False}, "unidentified", "human_review"),
+        ({"identification_confidence": 0.49}, "low_identification", "human_review"),
+        ({"patient_data_stripped": False}, "patient_data_not_scrubbed", "stop"),
     ],
 )
-def test_hard_gate_requirements_block_even_high_intent_visits(overrides, reason):
+def test_hard_gate_requirements_route_high_intent_visits_safely(overrides, reason, route):
     result = analyze_visits(request([view("p1", "/demo")], **overrides))
 
     assert not result.passes_threshold
     assert result.threshold_fail_reason == reason
+    assert result.routing_decision == route
+    if route == "human_review":
+        assert result.threshold_reasons == ("high_tier_page",)
+
+
+def test_unidentified_low_intent_visit_stops_without_human_review():
+    result = analyze_visits(request(
+        [view("p1", "/blog/no-show-rates")],
+        company_identified=False,
+        identification_confidence=0.0,
+    ))
+
+    assert result.threshold_fail_reason == "unidentified"
+    assert result.threshold_reasons == ()
+    assert result.routing_decision == "stop"
 
 
 def test_unscrubbed_visit_data_is_not_used_for_features():
@@ -130,6 +147,7 @@ def test_unscrubbed_visit_data_is_not_used_for_features():
     ))
 
     assert result.visit_ids == ()
+    assert result.routing_decision == "stop"
     assert result.pages_viewed == ()
     assert result.page_category_counts["pricing"] == 0
     assert "private" not in json.dumps(result.as_dict())
@@ -190,11 +208,12 @@ def test_schema_and_threshold_versions_are_exposed_as_json():
     )
     serialized = result.as_dict()
 
-    assert serialized["schema_version"] == "visit-v2"
+    assert serialized["schema_version"] == "visit-v3"
     assert serialized["taxonomy_version"] == "v2"
     assert serialized["threshold_config_version"] == "v2"
     assert serialized["pages_viewed"][0]["session_id"] == "lead-1:s1"
     assert serialized["threshold_reasons"] == ["high_tier_page"]
+    assert serialized["routing_decision"] == "research"
 
 
 def test_threshold_and_visit_inputs_reject_invalid_values():

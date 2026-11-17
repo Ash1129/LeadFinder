@@ -25,6 +25,7 @@ def test_simulated_inputs_run_through_the_real_gate():
     metrics = gate_eval.gate_metrics(gate_eval.run_gate(inputs), truth)
     assert 0.0 <= metrics["recall_should_pass"] <= 1.0
     assert sum(metrics["confusion"].values()) <= len(inputs)
+    assert sum(metrics["routing_outcomes"].values()) == len(inputs)
 
 
 def test_baseline_and_current_runs_record_their_taxonomy_versions():

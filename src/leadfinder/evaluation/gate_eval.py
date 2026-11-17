@@ -79,9 +79,12 @@ def _identified(r) -> bool:
 def gate_metrics(run: GateRun, truth: list[GroundTruth]) -> dict:
     by_persona = defaultdict(lambda: {"n": 0, "identified": 0, "passed": 0, "passed_identified": 0})
     tp = fn = fp = tn = 0
-    lost = Counter()
+    converter_routes = Counter()
+    converter_failures = Counter()
+    routes = Counter()
     for t in truth:
         r = run.results[t.lead_id]
+        routes[r.routing_decision] += 1
         row = by_persona[t.persona]
         ident = _identified(r)
         row["n"] += 1
@@ -96,7 +99,9 @@ def gate_metrics(run: GateRun, truth: list[GroundTruth]) -> dict:
                 fp += r.passes_threshold
                 tn += not r.passes_threshold
         if t.converted:
-            lost[r.threshold_fail_reason or "passed"] += 1
+            converter_routes[r.routing_decision] += 1
+            if r.threshold_fail_reason:
+                converter_failures[r.threshold_fail_reason] += 1
     personas = {
         p: {
             "n": v["n"],
@@ -112,7 +117,9 @@ def gate_metrics(run: GateRun, truth: list[GroundTruth]) -> dict:
         "recall_should_pass": tp / max(tp + fn, 1),
         "false_pass_rate_browsers": fp / max(fp + tn, 1),
         "confusion": {"tp": tp, "fn": fn, "fp": fp, "tn": tn},
-        "converters_by_outcome": dict(lost.most_common()),
+        "converters_by_route": dict(converter_routes.most_common()),
+        "converter_failures": dict(converter_failures.most_common()),
+        "routing_outcomes": dict(routes),
         "passed": sum(r.passes_threshold for r in run.results.values()),
     }
 

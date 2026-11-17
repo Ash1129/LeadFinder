@@ -9,9 +9,10 @@ from urllib.parse import unquote, urlsplit
 
 from .outreach import KNOWN_EHRS
 
-SCHEMA_VERSION = "visit-v2"
+SCHEMA_VERSION = "visit-v3"
 TAXONOMY_VERSION = "v2"
 Tier = Literal["high", "medium", "low"]
+RoutingDecision = Literal["research", "human_review", "stop"]
 HIGH_TIER: Tier = "high"
 MEDIUM_TIER: Tier = "medium"
 LOW_TIER: Tier = "low"
@@ -162,6 +163,7 @@ class VisitAnalysisResult:
     product_line_interest: tuple[str, ...]
     pages_viewed: tuple[PageFeature, ...]
     passes_threshold: bool
+    routing_decision: RoutingDecision
     threshold_reasons: tuple[str, ...]
     threshold_fail_reason: Optional[str]
     field_sources: dict[str, str]
@@ -342,7 +344,7 @@ def analyze_visits(
     elif not data.company_identified:
         hard_requirements_met = False
         fail_reason = "unidentified"
-        warnings.append("no practice is identified")
+        warnings.append("practice identification is unresolved")
     elif data.identification_confidence < config.min_identification_confidence:
         hard_requirements_met = False
         fail_reason = "low_identification"
@@ -375,6 +377,13 @@ def analyze_visits(
     passes_threshold = hard_requirements_met and bool(threshold_reasons)
     if hard_requirements_met and not passes_threshold:
         fail_reason = "only_low_tier_pages" if views and max_intent_tier == LOW_TIER else "single_shallow_session"
+    # Review identity-uncertain visits only when their behavior otherwise meets the intent rule.
+    if passes_threshold:
+        routing_decision: RoutingDecision = "research"
+    elif fail_reason in ("unidentified", "low_identification") and threshold_reasons:
+        routing_decision = "human_review"
+    else:
+        routing_decision = "stop"
 
     page_flags = {category: bool(count) for category, count in category_counts.items()}
     field_sources = {
@@ -426,7 +435,10 @@ def analyze_visits(
         product_line_interest=tuple(sorted(product_lines)),
         pages_viewed=tuple(page_features),
         passes_threshold=passes_threshold,
-        threshold_reasons=tuple(threshold_reasons if passes_threshold else ()),
+        routing_decision=routing_decision,
+        threshold_reasons=tuple(
+            threshold_reasons if passes_threshold or routing_decision == "human_review" else ()
+        ),
         threshold_fail_reason=None if passes_threshold else fail_reason,
         field_sources=field_sources,
         field_confidences=field_confidences,

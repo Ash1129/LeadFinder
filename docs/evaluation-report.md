@@ -8,7 +8,7 @@ All results are on simulated data. They test whether the modules behave as desig
 
 1. **Current gate (taxonomy v2)** passes 95.4% of identified visitors whose persona ground truth says they should pass; 0.0% of identified browsers are also passed. The v1-to-v2 taxonomy change reduced browser false passes and fixed catalog URL errors.
 2. **Taxonomy v2 comparison**: identified-visitor recall moves from 95.0% to 95.4%; browser false passes from 15.7% to 0.0%; page-category accuracy from 85.6% to 100.0%. V2 is implemented; its 100% catalog accuracy is not a real-traffic result.
-3. **Identification is the main modeled bottleneck**: 103 of 309 future converters (33.3%) are blocked as unidentified in this simulation. Identification is sampled from assumed persona rates (browser 40%, researcher 70%, ready_to_buy 80%, administrator 65%, owner 70%); these are not measured tracking-tool results. No threshold change recovers them.
+3. **Identification is the main modeled bottleneck**: 103 of 309 future converters (33.3%) have unresolved identity as their first gate failure in this simulation. Those that otherwise meet the intent rule route to human review; the rest stop. Identification is sampled from assumed persona rates (browser 40%, researcher 70%, ready_to_buy 80%, administrator 65%, owner 70%); these are not measured tracking-tool results. The v2 gate routes 300 of 2000 simulated visitors to human review because they meet the intent rule but lack sufficient identity; there is no persisted review queue. Changing gate thresholds alone cannot supply the missing identity.
 4. **Practice matching never picks the wrong practice** (0 wrong matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never separate two practices with the same name. Lowering the margin to 0.07 raises correct matches from 518 to 599 of 769 with still 0 wrong matches. To be confirmed on real directory data.
 
 ## 1. Gate: pass rates by persona
@@ -35,7 +35,11 @@ All results are on simulated data. They test whether the modules behave as desig
 | ready_to_buy | 198 | 83.8% | 83.8% | 100.0% |
 | researcher | 413 | 72.6% | 72.6% | 100.0% |
 
-Where simulated future converters end up (current v2 gate): passed 185, unidentified 103, single_shallow_session 11, only_low_tier_pages 6, low_identification 4.
+Current v2 route outcomes (simulated; no queue is implemented): human_review 300, research 769, stop 931.
+
+Routes for simulated future converters (current v2 gate): research 182, human_review 74, stop 53.
+
+First gate failure reasons for simulated future converters: unidentified 103, only_low_tier_pages 13, single_shallow_session 7, low_identification 4.
 
 ## 2. Page taxonomy coverage
 

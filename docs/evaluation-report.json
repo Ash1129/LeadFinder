@@ -41,12 +41,21 @@
       "fp": 51,
       "tn": 273
     },
-    "converters_by_outcome": {
-      "passed": 185,
+    "converters_by_route": {
+      "research": 185,
+      "human_review": 75,
+      "stop": 49
+    },
+    "converter_failures": {
       "unidentified": 103,
       "single_shallow_session": 11,
       "only_low_tier_pages": 6,
       "low_identification": 4
+    },
+    "routing_outcomes": {
+      "human_review": 384,
+      "stop": 799,
+      "research": 817
     },
     "passed": 817
   },
@@ -92,12 +101,21 @@
       "fp": 0,
       "tn": 324
     },
-    "converters_by_outcome": {
-      "passed": 182,
+    "converters_by_route": {
+      "research": 182,
+      "human_review": 74,
+      "stop": 53
+    },
+    "converter_failures": {
       "unidentified": 103,
       "only_low_tier_pages": 13,
       "single_shallow_session": 7,
       "low_identification": 4
+    },
+    "routing_outcomes": {
+      "human_review": 300,
+      "stop": 931,
+      "research": 769
     },
     "passed": 769
   },
