@@ -109,6 +109,7 @@ next version and put it to the scorecard:
 | `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
 | `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate; standalone, not app-wired |
 | `tests/test_visit_analysis.py` | focused feature, gate, privacy-boundary, and serialization tests |
+| `src/leadfinder/evaluation/` | persona visit simulator with separate ground truth; evaluation of the gate, page taxonomy and practice matching (`python -m leadfinder.evaluation` writes `docs/evaluation-report.md`) |
 | `src/leadfinder/auth.py` | accounts, roles (SDR, sales manager), scrypt passwords, sessions |
 | `src/leadfinder/service/` | the app, the security middleware and headers, the templates, `static/app.js` |
 
@@ -121,8 +122,9 @@ next version and put it to the scorecard:
 - Enrichment from the real NPPES registry instead of `seed.py`.
 - Daniel's concrete directory adapter and confirmed data/matching contract for `research.py`; the module cannot look
   up a real practice until that adapter is supplied.
-- Persona-based visit simulation with a separate ground-truth file. The standalone visit-analysis module includes
-  an initial healthcare page taxonomy and configurable thresholds, but these have not been evaluated or integrated.
+- Persona-based visit simulation and evaluation now exist (`src/leadfinder/evaluation/`, results in
+  `docs/evaluation-report.md`). The taxonomy and match-margin changes it recommends are not applied to the
+  modules. Not yet covered: the scoring benchmark against this ground truth and the SDR feedback loop.
 - Real outcomes: the model's labels are simulated, and SDR approvals and rejections do not retrain it yet.
 - The LLM-judgment row of the benchmark (Claude ranking the same held-out leads).
 - Integration of the standalone research module into an application workflow; its website fetcher is limited to a
