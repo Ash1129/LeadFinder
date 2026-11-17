@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% block title %}Visit review{% endblock %}
+{% block page_class %} wide{% endblock %}
+{% block style %}
+.rv-head{display:flex;flex-direction:column;gap:8px}.rv-head p{margin:0}
+.rv-table{min-width:720px}.rv-table td{padding:12px 16px 12px 0}.rv-table td:last-child{padding-right:0}
+.rv-note{max-width:760px}
+.rv-sub{display:block;font-size:14px;line-height:20px;color:var(--muted)}
+{% endblock %}
+{% block body %}
+{%- set labels = {'pending': 'waiting for identity review', 'identity_verified': 'identity verified', 'closed': 'closed', 'all': 'in the review log'} -%}
+<header class="rv-head">
+  <p class="kicker">Visit review · {{ counts.pending }} pending</p>
+  <h1 class="title">{{ rows|length }} case{{ 's' if rows|length != 1 }} {{ labels[status] }}</h1>
+  <p class="muted rv-note">These are scrubbed visits whose behavior met the intent rule but whose practice identity was unresolved or below confidence threshold. Confirm a match only when the evidence supports it. Identity verification does not start research.</p>
+</header>
+
+<ul class="tabs">
+  {% for s, label in [('pending', 'Pending'), ('identity_verified', 'Identity verified'), ('closed', 'Closed'), ('all', 'All')] %}
+  <li><a href="/review-queue?status={{ s }}"{% if status == s %} aria-current="page"{% endif %}>{{ label }} <span class="n">{{ counts[s] }}</span></a></li>
+  {% endfor %}
+</ul>
+
+{% if rows %}
+<div class="scroll">
+  <table class="rv-table">
+    <thead><tr><th scope="col">Received (UTC)</th><th scope="col">Visit / practice hint</th><th scope="col">Intent evidence</th><th scope="col">Identity</th><th scope="col">Status</th></tr></thead>
+    <tbody>{% for r in rows %}
+      <tr>
+        <td class="num">{{ r.created_at|when }}</td>
+        <td><a href="/review/{{ r.id }}">Review #{{ r.id }}</a><span class="rv-sub">{{ r.analysis.practice_name_raw or 'No practice name' }}{% if r.analysis.domain_or_org_hint %} · {{ r.analysis.domain_or_org_hint }}{% endif %}</span><span class="rv-sub">Reference: {{ r.lead_id }}</span></td>
+        <td>{{ r.analysis.threshold_reasons|join(', ') or 'No qualifying reasons' }}</td>
+        <td>{{ '%.0f'|format(r.analysis.identification_confidence * 100) }}% confidence{% if r.analysis.location_hint %}<span class="rv-sub">{{ r.analysis.location_hint }}</span>{% endif %}</td>
+        <td>{% if r.review_status == 'pending' %}<span class="badge warm">pending</span>{% elif r.review_status == 'identity_verified' %}<span class="badge approved">verified</span><span class="rv-sub">{{ r.practice_name or 'practice selected' }}</span>{% else %}<span class="badge rejected">closed</span>{% endif %}</td>
+      </tr>
+    {% endfor %}</tbody>
+  </table>
+</div>
+{% else %}
+<p class="muted">No visit reviews in this view.</p>
+{% endif %}
+{% endblock %}

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import time
 
 from leadfinder import auth
 from leadfinder.service.security import CSP
@@ -121,6 +122,110 @@ def test_sdr_cannot_open_the_audit_log_but_the_manager_can(sdr, manager):
 
 def test_missing_lead_is_a_404(sdr):
     assert sdr.get("/lead/99999").status_code == 404
+
+
+# ---------------- visit-analysis integration and human review ----------------
+def review_payload(request_id="visit-request-1"):
+    now = time.time()
+    return {
+        "request_id": request_id,
+        "lead_id": "visitor-ref-1",
+        "practice_name_raw": "North Clinic",
+        "domain_or_org_hint": "north.example",
+        "location_hint": "Boston, MA",
+        "company_identified": False,
+        "identification_confidence": 0.2,
+        "page_views": [
+            {"view_id": "view-1", "page_url": "https://north.example/pricing?email=private@example.test",
+             "viewed_at": now - 60, "seconds_on_page": 30},
+            {"view_id": "view-2", "page_url": "https://north.example/integrations", "viewed_at": now - 30,
+             "seconds_on_page": 20},
+        ],
+        "window_end": now,
+        "patient_data_stripped": True,
+    }
+
+
+def test_scrubbed_gate_review_is_persisted_and_resolved_in_the_app(app, sdr):
+    payload = review_payload()
+    response = sdr.post("/api/visit-analysis", json=payload)
+    assert response.status_code == 200
+    result = response.json()
+    assert result["routing_decision"] == "human_review"
+    assert result["review_status"] == "pending" and result["persisted"] is True
+    review_id = result["analysis_id"]
+
+    stored = app.state.conn.execute("SELECT * FROM visit_analyses WHERE id=?", (review_id,)).fetchone()
+    assert stored["review_status"] == "pending" and stored["created_by"] == "riley"
+    assert "private@example.test" not in stored["result_json"]
+    assert "pricing" in stored["result_json"] and "https://north.example" not in stored["result_json"]
+    queue = sdr.get("/review-queue")
+    assert queue.status_code == 200 and f"/review/{review_id}" in queue.text and "North Clinic" in queue.text
+    page = sdr.get(f"/review/{review_id}")
+    assert page.status_code == 200 and "Verify this practice's identity" in page.text
+    practice_id = app.state.conn.execute("SELECT id FROM practices ORDER BY id LIMIT 1").fetchone()["id"]
+    seen = form_value(page.text, "seen")
+    verified = sdr.post(
+        f"/review/{review_id}/verify",
+        data={"practice_id": practice_id, "note": "Matched against approved source", "seen": seen},
+        follow_redirects=False,
+    )
+    assert verified.status_code == 303 and verified.headers["location"].endswith("done=identity_verified")
+    saved = app.state.conn.execute(
+        "SELECT review_status, practice_id, resolved_by, resolution_note FROM visit_analyses WHERE id=?",
+        (review_id,),
+    ).fetchone()
+    assert (saved["review_status"], saved["practice_id"], saved["resolved_by"], saved["resolution_note"]) == (
+        "identity_verified", practice_id, "riley", "Matched against approved source"
+    )
+    resolved_page = sdr.get(f"/review/{review_id}")
+    assert "Research is not started by this resolution" in resolved_page.text
+    assert "/lead/" in resolved_page.text
+
+    repeated = sdr.post("/api/visit-analysis", json=payload).json()
+    assert repeated["analysis_id"] == review_id and repeated["persisted"] is True
+    assert repeated["review_status"] == "identity_verified"
+    changed = review_payload()
+    changed["practice_name_raw"] = "Different Clinic"
+    assert sdr.post("/api/visit-analysis", json=changed).status_code == 409
+
+
+def test_unverified_or_unsanitized_visits_cannot_enter_review_queue(app, sdr):
+    payload = review_payload("unsanitized-request")
+    payload["patient_data_stripped"] = False
+    response = sdr.post("/api/visit-analysis", json=payload)
+    assert response.status_code == 200
+    assert response.json()["routing_decision"] == "stop" and response.json()["persisted"] is False
+    assert app.state.conn.execute("SELECT COUNT(*) n FROM visit_analyses").fetchone()["n"] == 0
+
+    low_intent = review_payload("low-intent-request")
+    low_intent["page_views"] = [
+        {"view_id": "view-blog", "page_url": "https://north.example/blog/pricing-tips",
+         "viewed_at": low_intent["window_end"] - 30, "seconds_on_page": 20}
+    ]
+    response = sdr.post("/api/visit-analysis", json=low_intent)
+    assert response.status_code == 200
+    assert response.json()["routing_decision"] == "stop" and response.json()["persisted"] is False
+    assert app.state.conn.execute("SELECT COUNT(*) n FROM visit_analyses").fetchone()["n"] == 0
+    assert "0 pending" in sdr.get("/review-queue").text
+
+
+def test_visit_analysis_api_requires_login_and_review_close_is_audited(app, sdr):
+    payload = review_payload("close-request")
+    assert TestClient(app).post("/api/visit-analysis", json=payload).status_code == 401
+    review_id = sdr.post("/api/visit-analysis", json=payload).json()["analysis_id"]
+    page = sdr.get(f"/review/{review_id}")
+    seen = form_value(page.text, "seen")
+    closed = sdr.post(
+        f"/review/{review_id}/close",
+        data={"reason": "no_match", "note": "No trustworthy directory match", "seen": seen},
+        follow_redirects=False,
+    )
+    assert closed.status_code == 303 and closed.headers["location"].endswith("done=closed")
+    saved = app.state.conn.execute(
+        "SELECT review_status, resolved_by, resolution_note FROM visit_analyses WHERE id=?", (review_id,)
+    ).fetchone()
+    assert tuple(saved) == ("closed", "riley", "no reliable practice match: No trustworthy directory match")
 
 
 # ---------------- deciding ----------------

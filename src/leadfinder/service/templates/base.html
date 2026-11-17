@@ -154,6 +154,7 @@ h2.kicker[id]{scroll-margin-top:24px}
     <p class="glabel">Work</p>
     <a class="nav" href="/"{% if nav == 'overview' %} aria-current="page"{% endif %}>Overview</a>
     <a class="nav" href="/leads"{% if nav == 'leads' %} aria-current="page"{% endif %}>Leads{% if new_count %} <span class="num" style="color: var(--accentInk)">{{ new_count }}</span>{% endif %}</a>
+    <a class="nav" href="/review-queue"{% if nav == 'review' %} aria-current="page"{% endif %}>Visit review{% if review_count %} <span class="num" style="color: var(--accentInk)">{{ review_count }}</span>{% endif %}</a>
     <p class="glabel">System</p>
     <a class="nav" href="/how"{% if nav == 'how' %} aria-current="page"{% endif %}>How it works</a>
     <a class="nav" href="/model"{% if nav == 'model' %} aria-current="page"{% endif %}>Scoring model</a>

@@ -1,0 +1,100 @@
+{% extends "base.html" %}{% block title %}Review visit #{{ d.id }}{% endblock %}
+{% block style %}
+.vr-head{display:flex;flex-direction:column;gap:8px}.vr-head p{margin:0}
+.vr-sec{display:flex;flex-direction:column;gap:12px;max-width:900px}.vr-sec>p{margin:0}
+.vr-facts{margin:0;display:grid;grid-template-columns:minmax(150px,max-content) minmax(0,1fr);gap:0 28px}
+.vr-facts dt,.vr-facts dd{padding:9px 0;border-top:1px solid var(--line);margin:0}
+.vr-facts dt{color:var(--muted)}
+.vr-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:32px}
+.vr-form{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+.vr-form .field{width:100%;max-width:520px}
+.vr-form select,.vr-form textarea{width:100%}
+.vr-table{max-width:800px}
+@media(max-width:640px){.vr-facts{grid-template-columns:1fr}.vr-facts dd{border-top:0;padding-top:0}}
+{% endblock %}
+{% block body %}
+<header class="vr-head">
+  <p class="kicker"><a href="/review-queue">Visit review</a> · case #{{ d.id }} · received {{ d.created_at|when }} UTC</p>
+  <h1 class="title">{% if d.review_status == 'pending' %}Verify this practice's identity{% elif d.review_status == 'identity_verified' %}Identity verified{% else %}Review closed{% endif %}</h1>
+  <p class="muted">This record contains derived visit features and the allowlisted business hints—not raw page URLs. Do not select a practice based only on a weak name or location match.</p>
+</header>
+
+{% if stale %}<p class="notice warn"><b>This case changed.</b> Reloaded the current status; no second decision was recorded.</p>{% endif %}
+{% if done == 'identity_verified' %}<p class="notice"><b>Identity recorded.</b> The case is linked to the selected practice. This prototype does not automatically start research or create/update a scored lead.</p>{% endif %}
+{% if done == 'closed' %}<p class="notice"><b>Case closed without identity verification.</b> It will not be sent to research.</p>{% endif %}
+
+<section class="vr-sec">
+  <h2 class="kicker">What the gate saw</h2>
+  <dl class="vr-facts">
+    <dt>External reference</dt><dd>{{ d.lead_id }}</dd>
+    <dt>Practice name hint</dt><dd>{{ d.analysis.practice_name_raw or 'Unknown' }} · source: {{ d.analysis.field_sources.practice_name_raw }}</dd>
+    <dt>Domain / organization hint</dt><dd>{{ d.analysis.domain_or_org_hint or 'Unknown' }} · source: {{ d.analysis.field_sources.domain_or_org_hint }}</dd>
+    <dt>Location hint</dt><dd>{{ d.analysis.location_hint or 'Unknown' }} · source: {{ d.analysis.field_sources.location_hint }}</dd>
+    <dt>Identity state</dt><dd>{% if d.analysis.company_identified %}Identified{% else %}Unresolved{% endif %} · {{ '%.0f'|format(d.analysis.identification_confidence * 100) }}% confidence</dd>
+    <dt>Gate route</dt><dd>{{ d.analysis.routing_decision }}{% if d.analysis.threshold_fail_reason %} · {{ d.analysis.threshold_fail_reason }}{% endif %}</dd>
+    <dt>Intent evidence</dt><dd>{{ d.analysis.threshold_reasons|join(', ') or 'None' }}</dd>
+    <dt>Visit window</dt><dd>{{ d.analysis.window_start|when }} – {{ d.analysis.window_end|when }} UTC</dd>
+    <dt>Sessions / page views</dt><dd>{{ d.analysis.session_count }} / {{ d.analysis.pages_viewed|length }}</dd>
+    <dt>Created by</dt><dd>{{ d.created_by }} · request {{ d.request_id }}</dd>
+  </dl>
+</section>
+
+{% if d.analysis.warnings %}
+<section class="vr-sec">
+  <h2 class="kicker">Warnings</h2>
+  <ul>{% for warning in d.analysis.warnings %}<li>{{ warning }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+
+<section class="vr-sec">
+  <h2 class="kicker">Page categories</h2>
+  <div class="scroll">
+    <table class="vr-table"><thead><tr><th scope="col">Page type</th><th scope="col" class="r">Views</th></tr></thead>
+      <tbody>{% for category, count in d.analysis.page_category_counts.items() if count %}<tr><td>{{ category|replace('_', ' ')|title }}</td><td class="r num">{{ count }}</td></tr>{% else %}<tr><td colspan="2" class="muted">No pages analyzed</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+
+{% if d.review_status == 'pending' %}
+<section class="vr-actions">
+  <form class="vr-form" method="post" action="/review/{{ d.id }}/verify">
+    <h2 class="kicker">Verify identity</h2>
+    <p class="small muted">Choose an existing practice only if the submitted hints and your approved source support the match. The choice is recorded with your account.</p>
+    <label class="field">Existing practice
+      <select name="practice_id" required>
+        <option value="">Select a practice…</option>
+        {% for p in practices %}<option value="{{ p.id }}">{{ p.name }} · {{ p.specialty }} · {{ p.city }}, {{ p.state }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field">Evidence / note (optional)<textarea name="note" rows="3" maxlength="500"></textarea></label>
+    <input type="hidden" name="seen" value="{{ token }}">
+    <button class="btn primary" type="submit">Verify identity</button>
+  </form>
+
+  <form class="vr-form" method="post" action="/review/{{ d.id }}/close">
+    <h2 class="kicker">Close without resolving</h2>
+    <p class="small muted">Use this if there is no reliable match, the visit is not qualified, or it is a duplicate. This never approves an identity.</p>
+    <label class="field">Reason
+      <select name="reason" required><option value="">Choose a reason…</option>{% for key, label in close_reasons.items() %}<option value="{{ key }}">{{ label|capitalize }}</option>{% endfor %}</select>
+    </label>
+    <label class="field">Note (optional)<textarea name="note" rows="3" maxlength="400"></textarea></label>
+    <input type="hidden" name="seen" value="{{ token }}">
+    <button class="btn" type="submit">Close case</button>
+  </form>
+</section>
+{% elif d.review_status == 'identity_verified' %}
+<section class="vr-sec">
+  <h2 class="kicker">Recorded resolution</h2>
+  <p><b>{{ d.practice_name }}</b> · {{ d.city }}, {{ d.state }} · selected by {{ d.reviewer }} at {{ d.resolved_at|when }} UTC.</p>
+  {% if d.resolution_note %}<p class="muted">{{ d.resolution_note }}</p>{% endif %}
+  {% if d.lead %}<p><a class="btn" href="/lead/{{ d.lead.id }}">Open existing scored lead</a></p>{% else %}<p class="muted">No scored lead exists for this practice.</p>{% endif %}
+  <p class="notice"><b>Next step remains manual.</b> Research is not started by this resolution; the application still needs an approved directory adapter and a defined research handoff.</p>
+</section>
+{% else %}
+<section class="vr-sec">
+  <h2 class="kicker">Recorded closure</h2>
+  <p>Closed by {{ d.reviewer or d.resolved_by }} at {{ d.resolved_at|when }} UTC.</p>
+  {% if d.resolution_note %}<p class="muted">{{ d.resolution_note }}</p>{% endif %}
+</section>
+{% endif %}
+{% endblock %}

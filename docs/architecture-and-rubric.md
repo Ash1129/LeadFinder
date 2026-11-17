@@ -8,10 +8,11 @@ target design must not be described as functionality that already runs.
 - **Problem and users:** helps health-tech sales development representatives prioritize independent medical
   practices and review business outreach; a sales manager can inspect decision history.
 - **Inputs and research:** the app uses seeded, synthetic practice records and flat page/timestamp visits. There is
-  no real NPPES import, visitor/session identity, or app-connected lead-threshold gate. A standalone deterministic
-  visit-analysis module now provides versioned taxonomy v2 and session features; a standalone bounded research
-  module defines the agent loop, match safeguards, source-tagged result and website EHR extraction. Neither module
-  is called by the app, and the research module has no real directory adapter.
+  no real NPPES import or visitor/session identity source. The authenticated `POST /api/visit-analysis` endpoint
+  runs the deterministic gate and persists only scrubbed, behavior-qualified review cases; those cases appear in a
+  SQLite-backed Visit review queue. SDRs may link a case to an existing practice or close it with a reason. The
+  app does not scrub input or start research after a resolution. The bounded research module defines the agent
+  loop, match safeguards, source-tagged result and website EHR extraction, but has no real directory adapter.
 - **Scoring:** a hand-set points table and an explainable logistic-regression scorer rank all seeded practices.
   Their benchmark, including a gradient-boosted challenger, uses synthetic outcomes and held-out synthetic leads;
   it does not establish real-world conversion performance. There is no LLM scorer benchmark.
@@ -20,9 +21,9 @@ target design must not be described as functionality that already runs.
   Email and brief writing are single calls; the separate research module uses a bounded Claude tool-use loop but
   is not connected to the app.
 - **Responsible-AI boundary:** the app's outreach checks and model input selection address some content risks.
-  There is no raw-visit ingestion pipeline or ingestion-time patient-data scrubber. Do not connect real tracking
-  data or send raw URLs/forms to a model until that guardrail is implemented and tested. Call the standalone
-  research module only with allowlisted company-level name/domain/location hints after the gate and scrub.
+  The gate endpoint accepts caller-scrubbed visit data, but there is no real-tracking connector or ingestion-time
+  patient-data scrubber. Do not connect real tracking data until that guardrail is implemented and tested. Call the
+  standalone research module only with allowlisted company-level name/domain/location hints after the gate and scrub.
 - **Evaluation:** automated tests cover scoring, synthetic-model comparisons, outreach checks, web-service
   behavior, and a separate persona-based evaluation of the visit gate, taxonomy, and practice matching. The
   measured results are against simulator assumptions, not real sales outcomes or tracking coverage. SDR feedback
@@ -38,10 +39,10 @@ The brainstorm's decisions and their current implementation status:
    persistence, and per-node traceability; do not use an LLM supervisor.
 2. Apply an ingestion allowlist and patient-data scrub before any lead or model sees visit data. Compute structured
    visit features in code, then stop unidentified/low-confidence or low-intent visits at a recall-oriented,
-   versioned gate before costly research. `src/leadfinder/visit_analysis.py` implements the deterministic feature
-   and gate logic, including taxonomy v2, as a standalone module. A persona simulator evaluates it against
-   synthetic assumptions; ingestion-time scrubbing, real identity resolution, real-traffic validation, and
-   app/graph integration remain open.
+    versioned gate before costly research. `src/leadfinder/visit_analysis.py` implements the deterministic feature
+    and gate logic, including taxonomy v2. A persona simulator evaluates it against synthetic assumptions. The
+    authenticated app endpoint and review queue integrate the gate, but ingestion-time scrubbing, real identity
+    resolution, real-traffic validation, and LangGraph integration remain open.
 3. After the gate, run a one-call intent summary in parallel with a bounded ReAct prospect-research loop
    (maximum 10 tool calls). The standalone loop is now implemented in `src/leadfinder/research.py`; connecting
    Daniel's practice table and wiring it into the graph remain. Unknown EHR is explicit, never guessed. Ambiguous
@@ -77,16 +78,19 @@ sessionization, engagement metrics, role/EHR/specialty/product hints, source tag
 derive features from page views and the gate fails closed.
 Its `routing_decision` is `research` for qualified identified visits, `human_review` for scrubbed inputs with
 unidentified or low-confidence identity that otherwise meets the intent rule, and `stop` for unsanitized visits or
-visits that do not meet the intent rule. This is a standalone output contract; no persisted queue, reviewer UI, or
-automatic identity-resolution step exists. A human must verify the practice before any practice-specific
-research proceeds. Review cases retain the matched intent reasons while `passes_threshold` stays false, so
-orchestration must branch on `routing_decision`, not merely the pass boolean.
+visits that do not meet the intent rule. The authenticated app endpoint stores only scrubbed human-review cases in SQLite and
+provides a pending queue and reviewer page. A reviewer can verify a case against a practice already in the app or
+close it with a reason; the identity decision and actor are retained on the analysis record. This does not resolve
+identity automatically, add a new practice, or start research. The API trusts `patient_data_stripped` as a caller
+assertion and must not be connected to real traffic until a tested upstream scrubber exists. Review cases retain
+the matched intent reasons while `passes_threshold` stays false, so callers must branch on `routing_decision`,
+not merely the pass boolean.
 
 **Hanna owns evaluation of the gate**: validate the persona labels and simulated identification rates, then measure
 recall, false passes, and taxonomy coverage. **Sasha owns changes to the gate** based on that evidence. The 30-day
 lookback, 30-minute session timeout, 0.5 identification cutoff, and other threshold values remain unvalidated.
-Taxonomy v2 has only been checked against the simulator's URL catalog, not real traffic. The module is not
-integrated into this app yet.
+Taxonomy v2 has only been checked against the simulator's URL catalog, not real traffic. No tracking source
+currently submits to the endpoint; it runs when an authenticated client sends an analysis.
 
 ## Open decisions — resolve before integration
 
@@ -111,7 +115,7 @@ those decisions are made.
 
 | Area | Current working assumption | Who should confirm or update it |
 | --- | --- | --- |
-| **Visit input and privacy** | `VisitAnalysisInput` represents one lead/visitor, event timestamps, opaque view IDs, and allowlisted business hints. The caller-supplied `patient_data_stripped` flag is only a guard contract; it does not inspect or scrub data. The module ignores page views when the flag is false, but it does not provide ingestion, identity resolution, or retention policy. Scrubbed, identity-uncertain visits route to `human_review` only when behavior otherwise qualifies; no review queue exists. | Sasha and Mahika should agree on the input/shared-state shape and review-route contract; the data/ingestion owner must define and test minimization, identity, and scrubbing before real visits are connected. The team must assign a reviewer and queue owner before implementing persistent review. |
+| **Visit input and privacy** | `VisitAnalysisInput` represents one lead/visitor, event timestamps, opaque view IDs, and allowlisted business hints. The caller-supplied `patient_data_stripped` flag is only a guard contract; it does not inspect or scrub data. The authenticated endpoint persists only scrubbed human-review cases; stopped or unsanitized inputs are not persisted. The review UI links only to existing practices and records the reviewer. | Sasha and Mahika should confirm the input/shared-state shape and review-route contract; the data/ingestion owner must define and test minimization, identity, retention, and scrubbing before real visits are connected. The team should confirm whether all SDRs may verify identity and set a queue-retention policy. |
 | **Visit taxonomy and gate** | `visit_analysis.py` now uses taxonomy v2: content sections take precedence over slug keywords; known demo aliases and `/customers/<specialty>` are recognized. In the seeded simulator, identified-browser false passes drop from 15.7% to 0% and should-pass recall rises from 95.0% to 95.4%. The URLs and personas are simulated; no real-traffic validation exists. Other defaults remain 30 days, a 30-minute session gap, confidence 0.5, two criteria, two sessions or three average pages/session, and a high-tier-page pass. | Sasha owns gate changes. Hanna should validate URL catalogs, persona labels, and identification assumptions; then Sasha can revise taxonomy/thresholds. Revise versions and tests with behavior changes. |
 | **Identification coverage** | The simulator samples an assumed identification probability by persona (browser 40%, researcher 70%, ready-to-buy 80%, administrator 65%, owner 70%). These rates create unidentified visitors in the simulation; they are not measured tracking results. The gate requires a practice match and confidence >=0.5. | The tracking/data owner must select an allowed company-level identity source and measure match coverage/precision on labeled data. Do not raise simulated rates or lower the gate cutoff as a substitute for improving or evaluating the source. |
 | **Inferred hints** | Owner/administrator role, specialty, product-line, and EHR-interest fields are deterministic heuristics, not verified visitor attributes. Specialty slugs are an initial list; EHR names reuse `KNOWN_EHRS`. | Sasha and Hanna should test whether the signals are meaningful; Ashwin decides whether to consume, down-weight, or omit them from scoring. |
@@ -119,13 +123,14 @@ those decisions are made.
 | **Research evidence and budget** | The research agent allows at most 10 tool calls, accepts up to 50 directory candidates, and extracts EHR cues only from a candidate's public HTTPS homepage. | Daniel confirms source and domain suitability; Mahika decides graph routing/retry behavior without duplicating this bounded loop. Any broader research scope needs an explicit safety and source-quality decision. |
 | **Cross-module result shape** | Both standalone modules expose `as_dict()` output, but the field names and nesting have not been adopted as a shared lead-state schema. | Sasha, Daniel, Ashwin, and Mahika should agree on the versioned schema and unknown/partial behavior before graph or scoring integration. Update tests and schema versions when the agreed shape changes. |
 
-The standalone research loop and visit-analysis/gate module are implemented and have focused unit tests. The
-persona simulator and synthetic evaluation also exist; taxonomy v2 is applied in the gate. The research loop's
-concrete directory adapter, real identity source, app/graph integration, ingestion-time scrubber, and the open
-contracts above are not. The simulated gate results have not been validated on real visits or URL traffic. Until
-these items are closed, keep the current prototype runnable and clearly label remaining graph/integration work as
-planned. Do not substitute synthetic identification assumptions for measured coverage or make an unknown EHR into
-a guessed fact.
+The research loop and visit-analysis/gate module are implemented and have focused unit tests. The authenticated
+gate API, SQLite review queue, reviewer decisions, persona simulator, and synthetic evaluation also exist;
+taxonomy v2 is applied in the gate. The research loop's concrete directory adapter, real identity source,
+ingestion-time scrubber, automatic handoff after verification, LangGraph orchestration, and the open contracts
+above are not. The simulated gate results have not been validated on real visits or URL traffic. Until these
+items are closed, keep the current prototype runnable and clearly label remaining graph/research work as planned.
+Do not substitute synthetic identification assumptions for measured coverage or make an unknown EHR into a
+guessed fact.
 
 ## Course rubric: evidence and remaining work
 
@@ -136,7 +141,7 @@ evidence in the current checkout from work needed for the brainstorm's target pr
 | --- | --- | --- |
 | **1. Problem definition and AI justification — 15** | README states a health-tech lead-prioritization problem and intended SDR workflow. | State the target-user constraints and desired outcome precisely; justify learned ranking and constrained text generation against a simpler rules-only workflow, and scope what can be completed in the project timeline. |
 | **2. AI solution design and reasoning — 20** | Explainable logistic regression is compared with a points table and tree challenger; current UI documents the five-step prototype; the bounded research loop is specified in code. | Publish the final graph/data flows. Explain why visit analysis is deterministic, how the bounded tool-using research module uses evidence and match safeguards, and why human approval is retained. |
-| **3. AI implementation and integration — 35** | Working FastAPI/SQLite prototype, model training/serving, optional Anthropic writing, tested content checks and human decisions; standalone research and visit-analysis modules with a `human_review` route signal; persona simulator and evaluation CLI. | Neither module has app/graph integration, and the review signal is not a persisted queue or UI. Research has no real directory adapter; visit analysis has no real identity source or upstream scrubber. The LLM scoring comparison, revision loop, and send workflow are also not implemented. Demonstrate a functioning core path without presenting planned steps as complete. |
+| **3. AI implementation and integration — 35** | Working FastAPI/SQLite prototype, model training/serving, optional Anthropic writing, tested content checks and human decisions; authenticated visit-analysis API, persisted SQLite review queue, reviewer verification/closure UI, standalone research module, persona simulator and evaluation CLI. | The endpoint trusts a caller scrub assertion; there is no real identity source or research handoff after verification. Research has no real directory adapter, and LangGraph integration is not implemented. The LLM scoring comparison, revision loop, and send workflow are also open. Demonstrate the functioning review path without presenting planned steps as complete. |
 | **4. Testing, evaluation, iterative improvement — 25** | Tests cover the research loop with fake adapters, visit-analysis features/gate edge cases, persona-based gate/taxonomy/matching evaluation, and held-out synthetic scorer comparisons. The taxonomy v2 change was prompted by observed simulated false passes. | Validate persona assumptions and taxonomy on representative real URLs/data; measure real identity coverage, threshold and match behavior, failure/latency evidence, and safety. Synthetic-label metrics are not real-world effectiveness evidence. |
 | **5. Responsible AI, ethics, alignment — 15** | Outreach text is checked; generation uses selected business facts; human review is required; sending is disabled; visit analysis fails closed on an input marked unsanitized; limitations of simulated conversion are disclosed. | Implement and test actual pre-model ingestion minimization/scrubbing (the gate's boolean is only a contract), provenance/confidence and unknown handling, match ambiguity review, bounded retries, and explicit failure reporting. Discuss privacy, bias, false identification, hallucinations, and misuse. |
 | **6. Documentation and reproducibility — 10** | README has setup/configuration/test instructions; seeded synthetic generation and model versions support repeatability. This handoff records design status and unresolved interfaces. | Document final architecture, data/model/prompt versions, external services, graph configuration, evaluation procedure/results, and any access/setup requirements after decisions are closed. |

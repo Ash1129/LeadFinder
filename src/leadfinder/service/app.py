@@ -15,8 +15,10 @@
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import sqlite3
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,11 +26,13 @@ from typing import Optional
 
 from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from fastapi.templating import Jinja2Templates
 
 from .. import auth, ml, outreach
 from ..db import DEFAULT_DB, connect
 from ..seed import apply_model, seed
+from ..visit_analysis import PageView, VisitAnalysisInput, analyze_visits
 from ..writer import Writer, WriterError, make_writer
 from . import security
 from .security import SESSION_COOKIE, THEME_COOKIE, clear_session_cookie, lead_token, safe_next, set_session_cookie
@@ -38,9 +42,36 @@ TEMPLATES = Jinja2Templates(directory=str(HERE / "templates"))
 REJECT_REASONS = {"fit": "not our kind of practice", "size": "too large: a health system buys this",
                   "customer": "already a customer", "contact": "wrong or missing contact", "other": "another reason"}
 STATUSES = ("new", "approved", "rejected")
+REVIEW_STATUSES = ("pending", "identity_verified", "closed", "all")
+CLOSE_REASONS = {"no_match": "no reliable practice match", "not_qualified": "not a qualified prospect",
+                 "duplicate": "duplicate review", "other": "another reason"}
 # Leads are ranked by the model's chance; the points table breaks ties and stands in for a lead the model has not scored.
 RANK = "COALESCE(l.chance, l.score / 100.0) DESC, l.score DESC, l.id"
 SHOWN = "COALESCE(l.chance_band, l.band) AS band"
+
+
+class PageViewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    view_id: str = Field(min_length=1, max_length=200)
+    page_url: str = Field(min_length=1, max_length=2048)
+    viewed_at: FiniteFloat
+    seconds_on_page: FiniteFloat = Field(default=0.0, ge=0)
+
+
+class VisitAnalysisPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: str = Field(min_length=1, max_length=128)
+    lead_id: str = Field(min_length=1, max_length=200)
+    practice_name_raw: Optional[str] = Field(default=None, max_length=300)
+    domain_or_org_hint: Optional[str] = Field(default=None, max_length=300)
+    location_hint: Optional[str] = Field(default=None, max_length=300)
+    company_identified: bool
+    identification_confidence: FiniteFloat = Field(ge=0, le=1)
+    page_views: list[PageViewPayload] = Field(max_length=1000)
+    window_end: FiniteFloat
+    patient_data_stripped: bool
 
 
 def when(ts: Optional[float]) -> str:
@@ -50,6 +81,10 @@ def when(ts: Optional[float]) -> str:
 def ago(ts: float, now: Optional[float] = None) -> str:
     d = ((now or time.time()) - ts) / 86400
     return "today" if d < 1 else ("yesterday" if d < 2 else f"{int(d)} days ago")
+
+
+def review_token(row) -> str:
+    return hashlib.sha256(f"{row['id']}|{row['review_status']}|{row['created_at']}".encode()).hexdigest()[:16]
 
 
 TEMPLATES.env.filters["when"] = when
@@ -99,8 +134,11 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
     def ctx(request: Request, **kw):
         me: auth.Principal = request.state.me
         new = conn.execute("SELECT COUNT(*) n FROM leads WHERE status='new'").fetchone()["n"]
+        review_count = conn.execute(
+            "SELECT COUNT(*) n FROM visit_analyses WHERE routing_decision='human_review' AND review_status='pending'"
+        ).fetchone()["n"]
         return {"request": request, "me": me, "can": {p: me.can(p) for p in auth.PERMISSIONS}, "theme": theme(request),
-                "nav": "", "new_count": new, "writer": writer, "model": ml.load(conn), **kw}
+                "nav": "", "new_count": new, "review_count": review_count, "writer": writer, "model": ml.load(conn), **kw}
 
     def allow(request: Request, permission: str) -> auth.Principal:
         me = request.state.me
@@ -140,6 +178,22 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
                     token=lead_token(conn, d["id"]), reject_reasons=REJECT_REASONS, stale=False, done="", wrote="",
                     write_error="", blocked=False, now=time.time())
         return TEMPLATES.TemplateResponse(request, "lead.html", ctx(request, **(base | kw)), status_code=status_code)
+
+    def review_row(review_id: int):
+        row = conn.execute(
+            "SELECT v.*, p.name AS practice_name, p.city, p.state, s.name AS reviewer "
+            "FROM visit_analyses v LEFT JOIN practices p ON p.id=v.practice_id "
+            "LEFT JOIN staff s ON s.username=v.resolved_by "
+            "WHERE v.id=? AND v.routing_decision='human_review'",
+            (review_id,),
+        ).fetchone()
+        if row is None:
+            raise HTTPException(404, "no such visit review")
+        d = dict(row)
+        d["analysis"] = json.loads(d["result_json"])
+        d["lead"] = conn.execute("SELECT id FROM leads WHERE practice_id=?", (d["practice_id"],)).fetchone() \
+            if d["practice_id"] is not None else None
+        return d
 
     # ---------------- logging in ----------------
     def login_view(request: Request, next_: str, error: str = "", status: int = 200):
@@ -204,6 +258,156 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         counts["all"] = sum(counts.values())
         return TEMPLATES.TemplateResponse(request, "leads.html", ctx(request, nav="leads", rows=rows, status=status, counts=counts,
                                                                      now=time.time()))
+
+    @app.get("/review-queue", response_class=HTMLResponse)
+    def review_queue(request: Request, status: str = "pending"):
+        allow(request, "view_leads")
+        status = status if status in REVIEW_STATUSES else "pending"
+        where = "AND v.review_status=?" if status != "all" else ""
+        params = (status,) if status != "all" else ()
+        rows = []
+        for row in conn.execute(
+            "SELECT v.id, v.lead_id, v.created_at, v.review_status, v.resolution_note, v.result_json, "
+            "v.practice_id, p.name AS practice_name, p.city, p.state "
+            "FROM visit_analyses v LEFT JOIN practices p ON p.id=v.practice_id "
+            f"WHERE v.routing_decision='human_review' {where} ORDER BY "
+            "CASE v.review_status WHEN 'pending' THEN 0 ELSE 1 END, v.created_at DESC",
+            params,
+        ):
+            item = dict(row)
+            item["analysis"] = json.loads(item.pop("result_json"))
+            rows.append(item)
+        counts = {s: 0 for s in REVIEW_STATUSES if s != "all"}
+        for row in conn.execute(
+            "SELECT review_status, COUNT(*) n FROM visit_analyses "
+            "WHERE routing_decision='human_review' GROUP BY review_status"
+        ):
+            counts[row["review_status"]] = row["n"]
+        counts["all"] = sum(counts.values())
+        return TEMPLATES.TemplateResponse(
+            request, "review_queue.html",
+            ctx(request, nav="review", rows=rows, status=status, counts=counts),
+        )
+
+    @app.get("/review/{review_id}", response_class=HTMLResponse)
+    def visit_review(request: Request, review_id: int, stale: str = "", done: str = ""):
+        allow(request, "view_leads")
+        d = review_row(review_id)
+        practices = [dict(row) for row in conn.execute(
+            "SELECT id, name, specialty, city, state FROM practices ORDER BY name, city"
+        )]
+        return TEMPLATES.TemplateResponse(
+            request, "visit_review.html",
+            ctx(
+                request, nav="review", d=d, practices=practices, token=review_token(d),
+                stale=stale == "1", done=done if done in ("identity_verified", "closed") else "",
+                close_reasons=CLOSE_REASONS,
+            ),
+        )
+
+    @app.post("/api/visit-analysis")
+    def submit_visit_analysis(request: Request, payload: VisitAnalysisPayload):
+        """Run the deterministic gate for an authenticated upstream caller and persist scrubbed review cases."""
+        allow(request, "act_on_leads")
+        if not payload.request_id.strip() or not payload.lead_id.strip():
+            raise HTTPException(422, "request_id and lead_id cannot be blank")
+        request_id = payload.request_id.strip()
+        lead_id = payload.lead_id.strip()
+        data = VisitAnalysisInput(
+            lead_id=lead_id,
+            practice_name_raw=payload.practice_name_raw,
+            domain_or_org_hint=payload.domain_or_org_hint,
+            location_hint=payload.location_hint,
+            company_identified=payload.company_identified,
+            identification_confidence=payload.identification_confidence,
+            page_views=tuple(PageView(**view.model_dump()) for view in payload.page_views),
+            window_end=payload.window_end,
+            patient_data_stripped=payload.patient_data_stripped,
+        )
+        result = analyze_visits(data)
+        result_json = json.dumps(result.as_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        review_id = None
+        persisted = False
+        review_status = None
+        if payload.patient_data_stripped and result.routing_decision == "human_review":
+            existing = conn.execute(
+                "SELECT id, result_json, review_status FROM visit_analyses WHERE request_id=?", (request_id,)
+            ).fetchone()
+            if existing is not None:
+                if existing["result_json"] != result_json:
+                    raise HTTPException(409, "request_id was already used for a different visit analysis")
+                review_id, persisted, review_status = existing["id"], True, existing["review_status"]
+            else:
+                review_status = "pending"
+                try:
+                    cur = conn.execute(
+                        "INSERT INTO visit_analyses(request_id, lead_id, routing_decision, review_status, result_json, "
+                        "created_by, created_at) VALUES(?,?,?,?,?,?,?)",
+                        (request_id, lead_id, result.routing_decision, review_status, result_json,
+                         request.state.me.username, time.time()),
+                    )
+                    review_id, persisted = cur.lastrowid, True
+                except sqlite3.IntegrityError:
+                    # The unique key makes concurrent retries safe; surface unrelated storage failures.
+                    existing = conn.execute(
+                        "SELECT id, result_json, review_status FROM visit_analyses WHERE request_id=?", (request_id,)
+                    ).fetchone()
+                    if existing is None:
+                        raise
+                    if existing["result_json"] != result_json:
+                        raise HTTPException(409, "request_id was already used for a different visit analysis")
+                    review_id, persisted, review_status = existing["id"], True, existing["review_status"]
+        return {
+            "analysis_id": review_id,
+            "persisted": persisted,
+            "routing_decision": result.routing_decision,
+            "review_status": review_status,
+            "analysis": result.as_dict(),
+        }
+
+    def decide_visit_review(request: Request, review_id: int, seen: str, decision: str, **kw):
+        me = allow(request, "act_on_leads")
+        d = review_row(review_id)
+        if seen != review_token(d) or d["review_status"] != "pending":
+            return RedirectResponse(f"/review/{review_id}?stale=1", status_code=303)
+        cur = conn.execute(
+            "UPDATE visit_analyses SET review_status=?, practice_id=?, resolved_by=?, resolved_at=?, "
+            "resolution_note=? WHERE id=? AND routing_decision='human_review' AND review_status='pending'",
+            (decision, kw.get("practice_id"), me.username, time.time(), kw.get("note"), review_id),
+        )
+        if cur.rowcount != 1:
+            return RedirectResponse(f"/review/{review_id}?stale=1", status_code=303)
+        return RedirectResponse(f"/review/{review_id}?done={decision}", status_code=303)
+
+    @app.post("/review/{review_id}/verify")
+    def verify_visit_identity(
+        request: Request,
+        review_id: int,
+        practice_id: int = Form(...),
+        note: str = Form(""),
+        seen: str = Form(""),
+    ):
+        allow(request, "act_on_leads")
+        if conn.execute("SELECT 1 FROM practices WHERE id=?", (practice_id,)).fetchone() is None:
+            raise HTTPException(400, "choose an existing practice")
+        return decide_visit_review(
+            request, review_id, seen, "identity_verified", practice_id=practice_id, note=note.strip()[:500] or None
+        )
+
+    @app.post("/review/{review_id}/close")
+    def close_visit_review(
+        request: Request,
+        review_id: int,
+        reason: str = Form(...),
+        note: str = Form(""),
+        seen: str = Form(""),
+    ):
+        allow(request, "act_on_leads")
+        if reason not in CLOSE_REASONS:
+            raise HTTPException(400, "pick one of the close reasons")
+        return decide_visit_review(
+            request, review_id, seen, "closed", note=f"{CLOSE_REASONS[reason]}: {note.strip()[:400]}".rstrip(": ")
+        )
 
     @app.get("/lead/{lead_id}", response_class=HTMLResponse)
     def lead(request: Request, lead_id: int, stale: str = "", done: str = "", wrote: str = ""):

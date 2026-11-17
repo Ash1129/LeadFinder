@@ -24,23 +24,24 @@ as AuxoCase (the palette and type of ashwinprajeeth.com, light and dark themes),
 ## Team handoff: brainstorm decisions and rubric
 
 **The brainstorm describes a target pipeline, not the current end-to-end application.** This checkout is a working
-lead-scoring and human-reviewed outreach prototype. A bounded prospect-research module now exists in
-`src/leadfinder/research.py`, and standalone visit features and a deterministic intent gate now exist in
-`src/leadfinder/visit_analysis.py`. Neither module is wired into the app or LangGraph; the research module has no
-real practice-directory adapter, and visit analysis relies on a caller to provide already-scrubbed data. Do not
-present these standalone modules as a live end-to-end workflow.
+lead-scoring and human-reviewed outreach prototype. The visit gate is integrated into the authenticated app at
+`POST /api/visit-analysis`; scrubbed, behavior-qualified review cases persist in SQLite and SDRs can resolve or close them in the
+Visit review UI. The gate still depends on the caller's `patient_data_stripped` assertion, the UI only matches
+against practices already in the app, and identity verification does not start research. The bounded
+prospect-research module in `src/leadfinder/research.py` has no real practice-directory adapter and is not wired
+into the app or LangGraph. Do not present this as a live visitor-tracking-to-research workflow.
 
 ### Owner handoff
 
 - **Daniel (@Dami047) — data:** implement the `PracticeDirectory` adapter in `research.py`; confirm stable IDs,
   fields/provenance, matching cutoff, and website-domain quality. The current research match cutoffs are heuristics,
   not calibrated probabilities.
-- **Sasha (@Sasha-Shkolnikov) — visit analysis:** standalone deterministic features and gate are in
-  `src/leadfinder/visit_analysis.py`; taxonomy v2 now handles content sections before slug keywords, common demo
-  paths, and customer/specialty pages. Validate against representative real-site URLs and keep other thresholds
-  and inferred hints provisional; integrate only after the scrubbed visit-data contract is agreed. For scrubbed
-  inputs, behavior-qualified unresolved/low-confidence visits emit `routing_decision=human_review`; low-intent
-  unresolved visits stop. Neither route passes an unverified practice to research.
+- **Sasha (@Sasha-Shkolnikov) — visit analysis:** deterministic features and gate are in
+  `src/leadfinder/visit_analysis.py`; taxonomy v2 handles content sections before slug keywords, common demo
+  paths, and customer/specialty pages. The authenticated app endpoint runs the gate, stores scrubbed review cases, and
+  routes behavior-qualified unresolved/low-confidence visits to the Visit review queue. Validate against
+  representative real-site URLs; keep thresholds and inferred hints provisional. The endpoint does not scrub
+  input; the caller must not set `patient_data_stripped=true` until a real ingestion scrubber exists.
 - **Hanna (@hannamlt) — evaluation:** the persona simulator and separate ground truth are now in
   `src/leadfinder/evaluation/`. Validate the persona/should-pass labels and the assumed identification rates;
   report gate recall, false passes, taxonomy coverage, and match accuracy to Sasha/Daniel. Keep labels out of
@@ -50,9 +51,10 @@ present these standalone modules as a live end-to-end workflow.
   ambiguous candidates affect scores and reasons.
 - **Gabriel (@gabrielmaurad) — outreach:** use sourced research facts; confirm draft checks/revisions and approval
   feedback. Sending stays disabled until its owner and provider are agreed.
-- **Mahika (@ma2255-cu) — orchestration:** wire the gate and `ResearchAgent` into LangGraph; define checkpointing,
-  traces, retries, and routing for `human_review`, `partial`, and `failed` outcomes after owners confirm the
-  input/output contracts. Do not send unresolved identities to research or duplicate the research loop.
+- **Mahika (@ma2255-cu) — orchestration:** wire the gate, persisted review outcome, and `ResearchAgent` into
+  LangGraph; define checkpointing, traces, retries, and routing for `human_review`, `partial`, and `failed`
+  outcomes after owners confirm the input/output contracts. Do not send unresolved identities to research or
+  duplicate the research loop.
 
 **Dependency order:** confirm privacy and shared schemas -> provide the real directory adapter and revise the
 standalone gate from evaluation evidence -> wire the graph -> connect scoring/outreach -> evaluate and document
@@ -67,11 +69,12 @@ and tests as real data and evaluation decisions arrive. Full questions and rubri
   Agree on identity, fields, retention, and upstream scrubbing before connecting real visits. The simulator's
   identification rates are assumptions, not measured tracking coverage; do not raise them as a substitute for
   improving the real identity source.
-- **Unresolved identity routing:** the standalone result routes scrubbed, unidentified or low-confidence visits
-  to `human_review` only when their behavior meets the intent rule; otherwise they stop. Unsanitized visits always
-  stop, and qualified identified visits route to `research`. For review cases, `passes_threshold` remains false
-  and `threshold_reasons` records the behavioral evidence; consumers should route on `routing_decision`. This is
-  only a routing signal: there is no persisted queue, reviewer UI, or automatic identity-resolution step yet.
+- **Unresolved identity routing:** the result routes scrubbed, unidentified or low-confidence visits to
+  `human_review` only when their behavior meets the intent rule; otherwise they stop. The authenticated
+  `/api/visit-analysis` endpoint persists only scrubbed `human_review` cases, and the Visit review page records an SDR's
+  verification against an existing practice or closes the case with a reason. `passes_threshold` remains false
+  for review cases; consumers should route on `routing_decision`. The API does not scrub input or start research,
+  and verified identities are not automatically enriched or scored.
 - **Gate and inferred hints:** taxonomy v2 is implemented based on simulated URLs, but still needs representative
   real-site validation. The 30-day lookback, 30-minute session timeout, 0.5 identification cutoff, other gate
   rules, and owner/administrator heuristics remain provisional. Hanna's evaluation should drive Sasha's revisions;
@@ -92,6 +95,16 @@ Open http://127.0.0.1:8010. The first start takes a few seconds while the model 
 from the database. On first start an empty `data/leadfinder.db` is also filled with 40 synthetic practices, their
 visits, their scored leads and call briefs (no emails: those are written on request), and the demo logins listed on the login page (`riley` and `jo` are SDRs,
 `morgan` is the sales manager; the password is `leadfinder`). Set `LEADFINDER_DEMO=0` to start empty instead.
+
+### Sending visit analyses to the gate
+
+A logged-in staff client with `act_on_leads` permission can submit allowlisted, already-scrubbed JSON to
+`POST /api/visit-analysis`; the endpoint uses the app's staff session, not a separate service token. There is no
+tracking connector in this checkout. Supply a unique `request_id` for retry-safe submission. The response includes
+the `routing_decision`; only scrubbed `human_review` cases are persisted and appear in **Visit review**.
+Reviewers may link a case to an existing practice or close it with a reason. The app does not perform scrubbing,
+identify practices automatically, or launch research after verification. Do not send real visit data until an
+approved upstream scrubber and identity source are in place.
 
 To have Claude write the emails and call briefs, put `ANTHROPIC_API_KEY=...` in a `.env` file beside `asgi.py`
 (it is gitignored; `.env.example` lists every setting) and restart. The tests never call the API.
@@ -119,7 +132,9 @@ next version and put it to the scorecard:
 | `src/leadfinder/writer.py` | who writes the email and the call brief: Claude through the Anthropic SDK, or the templates |
 | `src/leadfinder/seed.py` | synthetic practices with valid-format NPIs, and their visits |
 | `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
-| `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate; standalone, not app-wired |
+| `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate |
+| `src/leadfinder/service/app.py` | authenticated visit-analysis API and human-review queue integration |
+| `src/leadfinder/service/templates/review_queue.html` and `visit_review.html` | pending review queue and reviewer decision pages |
 | `tests/test_visit_analysis.py` | focused feature, gate, privacy-boundary, and serialization tests |
 | `src/leadfinder/evaluation/` | persona visit simulator with separate ground truth; evaluation of the gate, page taxonomy and practice matching (`python -m leadfinder.evaluation` writes `docs/evaluation-report.md`) |
 | `src/leadfinder/auth.py` | accounts, roles (SDR, sales manager), scrypt passwords, sessions |
@@ -127,7 +142,7 @@ next version and put it to the scorecard:
 
 ## Not built yet (from the proposal)
 
-- The brainstorm's LangGraph pipeline: integration of standalone visit features and recall-oriented gate,
+- The brainstorm's LangGraph pipeline: integration of visit features and recall-oriented gate,
   post-gate intent summary and orchestration of prospect research, cross-check, parallel scorers, checked/revised
   outreach, and saved human approval. The research and visit-analysis modules exist standalone, but the existing
   app is not an agent orchestrator.
@@ -141,7 +156,10 @@ next version and put it to the scorecard:
   the SDR feedback loop.
 - Real outcomes: the model's labels are simulated, and SDR approvals and rejections do not retrain it yet.
 - The LLM-judgment row of the benchmark (Claude ranking the same held-out leads).
-- Integration of the standalone research module into an application workflow; its website fetcher is limited to a
-  candidate's HTTPS homepage and exact, locally extracted EHR cues.
-- Ingestion-time patient-data stripping, per-node traces/retries/review queues, draft revision/send-back, and
-  feedback-driven scoring. Existing outreach checks are not a substitute for the proposed ingestion guardrail.
+- Integration of the research module into an application workflow; its website fetcher is limited to a candidate's
+  HTTPS homepage and exact, locally extracted EHR cues. The current review UI only links to an existing practice
+  and does not start research or create a lead.
+- An actual ingestion-time patient-data scrubber and approved company-identity source. The gate API only checks
+  the caller's `patient_data_stripped` flag; it is not a privacy filter. Also open: per-node graph traces/retries,
+  draft revision/send-back, and feedback-driven scoring. Existing outreach checks are not a substitute for the
+  proposed ingestion guardrail.

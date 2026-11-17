@@ -67,6 +67,16 @@
 </section>
 
 <section class="hw-sec">
+  <h2 id="hw-review" class="kicker">Identity review · {{ review_count }} pending</h2>
+  <p>A logged-in staff client submits already-scrubbed visit data to <code>POST /api/visit-analysis</code>. If behavior qualifies but identity is missing or uncertain, the gate stores a review case in SQLite. An SDR can open <a href="/review-queue">Visit review</a>, verify it against an existing practice, or close it with a reason. The decision records who acted and when.</p>
+  <dl class="hw-facts">
+    <dt>Before submission</dt><dd>The caller must allowlist and scrub the data. The API trusts `patient_data_stripped`; it is not a scrubber. Unsanitized submissions stop and are not persisted.</dd>
+    <dt>After identity verification</dt><dd>The case links to the selected existing practice and may link to its existing scored lead. It does not create a new practice, launch research, or change a lead's score.</dd>
+    <dt>Unresolved after review</dt><dd>Close the case with a reason. No practice-specific research runs.</dd>
+  </dl>
+</section>
+
+<section class="hw-sec">
   <h2 id="hw-score" class="kicker">Scoring · two scorers on the same facts</h2>
   <p>Every lead gets two scores, and both show their working on the lead's page.</p>
   <dl class="hw-facts">
@@ -109,6 +119,7 @@
       <tbody>
         <tr><td>Practices</td><td>Made up, with the registry's fields and an NPI that passes the check digit</td><td>Looked up in the NPPES registry</td></tr>
         <tr><td>Visits</td><td>Made up, over the last three weeks</td><td>Read from the site's visitor-tracking tool</td></tr>
+        <tr><td>Identity review</td><td>Authenticated API, SQLite queue, SDR verification or closure; no research starts</td><td>Approved identity source, new-practice handling, and an explicit research handoff</td></tr>
         <tr><td>The model's training</td><td>A simulated history of won and lost leads, a new version each simulated month, a scorecard deciding which is live</td><td>Retrained on what SDRs approved and rejected, through the same scorecard</td></tr>
         <tr><td>The benchmark</td><td>The model, the points table and a second model, on the same held-out leads</td><td>Claude's own ranking of those leads, as a fourth row</td></tr>
         <tr><td>Writing</td><td>{{ 'Claude, on request, checked by code' if writer.is_model else 'A template, on request; Claude once a credential is set' }}</td><td>The same</td></tr>

@@ -99,6 +99,21 @@ CREATE TABLE IF NOT EXISTS sessions(
   created_at REAL NOT NULL,
   last_seen REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS visit_analyses(
+  id INTEGER PRIMARY KEY,
+  request_id TEXT UNIQUE NOT NULL,
+  lead_id TEXT NOT NULL,
+  routing_decision TEXT NOT NULL CHECK(routing_decision='human_review'),
+  review_status TEXT NOT NULL CHECK(review_status IN ('pending', 'identity_verified', 'closed')),
+  result_json TEXT NOT NULL,
+  created_by TEXT NOT NULL REFERENCES staff(username),
+  created_at REAL NOT NULL,
+  practice_id INTEGER REFERENCES practices(id),
+  resolved_by TEXT REFERENCES staff(username),
+  resolved_at REAL,
+  resolution_note TEXT
+);
+CREATE INDEX IF NOT EXISTS visit_analyses_review ON visit_analyses(routing_decision, review_status, created_at);
 """
 
 
