@@ -17,6 +17,7 @@ import time
 from . import ml, synth
 from .scoring import score_practice
 from .synth import PLACES, SUFFIX
+from .visit_analysis import PageView, VisitAnalysisInput, analyze_visits
 from .writer import Offline
 
 FIRST = ["Alex", "Jordan", "Priya", "Marcus", "Elena", "Sam", "Tara", "Devon", "Lena", "Omar", "Grace", "Hugo"]
@@ -72,6 +73,103 @@ def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None
     leads = score_all(conn, now=now)
     apply_model(conn, now=now)
     return {"practices": n, "visits": visits_made, "leads": leads}
+
+
+def seed_demo_review_cases(conn: sqlite3.Connection, now: float | None = None) -> int:
+    """Add labeled synthetic review examples once, without resetting a demo user's later decisions."""
+    now = time.time() if now is None else now
+    practices = conn.execute("SELECT id, name, city, state FROM practices ORDER BY id LIMIT 2").fetchall()
+    if not practices:
+        raise RuntimeError("demo review cases require at least one seeded practice")
+    known = practices[0]
+    second = practices[-1]
+    cases = [
+        {
+            "request_id": "demo-review-unidentified-v1",
+            "lead_id": "demo-visitor-unidentified",
+            "practice_name_raw": None,
+            "domain_or_org_hint": None,
+            "location_hint": None,
+            "company_identified": False,
+            "identification_confidence": 0.0,
+            "pages": (("/pricing", 90.0), ("/integrations", 45.0)),
+            "review_status": "pending",
+            "practice_id": None,
+            "note": None,
+        },
+        {
+            "request_id": "demo-review-low-confidence-v1",
+            "lead_id": "demo-visitor-low-confidence",
+            "practice_name_raw": second["name"],
+            "domain_or_org_hint": None,
+            "location_hint": f"{second['city']}, {second['state']}",
+            "company_identified": True,
+            "identification_confidence": 0.35,
+            "pages": (("/request-a-demo", 75.0), ("/security", 50.0)),
+            "review_status": "pending",
+            "practice_id": None,
+            "note": None,
+        },
+        {
+            "request_id": "demo-review-verified-v1",
+            "lead_id": "demo-visitor-verified",
+            "practice_name_raw": known["name"],
+            "domain_or_org_hint": None,
+            "location_hint": f"{known['city']}, {known['state']}",
+            "company_identified": False,
+            "identification_confidence": 0.0,
+            "pages": (("/pricing", 60.0),),
+            "review_status": "identity_verified",
+            "practice_id": known["id"],
+            "note": "Synthetic demo only: reviewer matched the hint to a seeded practice.",
+        },
+        {
+            "request_id": "demo-review-closed-v1",
+            "lead_id": "demo-visitor-closed",
+            "practice_name_raw": None,
+            "domain_or_org_hint": None,
+            "location_hint": None,
+            "company_identified": False,
+            "identification_confidence": 0.0,
+            "pages": (("/demo", 40.0),),
+            "review_status": "closed",
+            "practice_id": None,
+            "note": "Synthetic demo only: no reliable practice match.",
+        },
+    ]
+    made = 0
+    for index, case in enumerate(cases):
+        created_at = now - (len(cases) - index) * 3600
+        window_end = created_at
+        data = VisitAnalysisInput(
+            lead_id=case["lead_id"],
+            practice_name_raw=case["practice_name_raw"],
+            domain_or_org_hint=case["domain_or_org_hint"],
+            location_hint=case["location_hint"],
+            company_identified=case["company_identified"],
+            identification_confidence=case["identification_confidence"],
+            page_views=tuple(
+                PageView(f"{case['lead_id']}-view-{i}", page, window_end - i * 120, dwell)
+                for i, (page, dwell) in enumerate(case["pages"])
+            ),
+            window_end=window_end,
+            patient_data_stripped=True,
+        )
+        result = analyze_visits(data)
+        if result.routing_decision != "human_review":
+            raise RuntimeError(f"demo case {case['request_id']} did not route to human review")
+        resolved = case["review_status"] != "pending"
+        cur = conn.execute(
+            "INSERT INTO visit_analyses(request_id, lead_id, routing_decision, review_status, is_demo, result_json, "
+            "created_by, created_at, practice_id, resolved_by, resolved_at, resolution_note) "
+            "VALUES(?,?,'human_review',?,1,?,'morgan',?,?,?,?,?) ON CONFLICT(request_id) DO NOTHING",
+            (case["request_id"], case["lead_id"], case["review_status"],
+             json.dumps(result.as_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False),
+             created_at, case["practice_id"], "morgan" if resolved else None,
+             created_at + 600 if resolved else None, case["note"]),
+        )
+        made += cur.rowcount
+    return made
 
 
 def score_all(conn: sqlite3.Connection, now: float | None = None) -> int:

@@ -31,7 +31,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import auth, ml, outreach
 from ..db import DEFAULT_DB, connect
-from ..seed import apply_model, seed
+from ..seed import apply_model, seed, seed_demo_review_cases
 from ..visit_analysis import PageView, VisitAnalysisInput, analyze_visits
 from ..writer import Writer, WriterError, make_writer
 from . import security
@@ -106,9 +106,11 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
     conn = connect(db_path)
     writer = writer or make_writer()
     ml.ensure(conn)                     # the trained scorer: fitted on first start (a few seconds), then read from the database
-    if demo if demo is not None else os.environ.get("LEADFINDER_DEMO", "1") != "0":
+    demo_mode = demo if demo is not None else os.environ.get("LEADFINDER_DEMO", "1") != "0"
+    if demo_mode:
         seed(conn)
         auth.seed_demo_accounts(conn)
+        seed_demo_review_cases(conn)
     apply_model(conn)                   # leads from before the model, or scored by an older one
     auth.bootstrap_from_env(conn)
 
@@ -267,7 +269,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         params = (status,) if status != "all" else ()
         rows = []
         for row in conn.execute(
-            "SELECT v.id, v.lead_id, v.created_at, v.review_status, v.resolution_note, v.result_json, "
+            "SELECT v.id, v.lead_id, v.created_at, v.review_status, v.is_demo, v.resolution_note, v.result_json, "
             "v.practice_id, p.name AS practice_name, p.city, p.state "
             "FROM visit_analyses v LEFT JOIN practices p ON p.id=v.practice_id "
             f"WHERE v.routing_decision='human_review' {where} ORDER BY "

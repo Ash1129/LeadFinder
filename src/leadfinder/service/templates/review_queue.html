@@ -11,7 +11,7 @@
 <header class="rv-head">
   <p class="kicker">Visit review · {{ counts.pending }} pending</p>
   <h1 class="title">{{ rows|length }} case{{ 's' if rows|length != 1 }} {{ labels[status] }}</h1>
-  <p class="muted rv-note">These are scrubbed visits whose behavior met the intent rule but whose practice identity was unresolved or below confidence threshold. Confirm a match only when the evidence supports it. Identity verification does not start research.</p>
+  <p class="muted rv-note">These are scrubbed visits whose behavior met the intent rule but whose practice identity was unresolved or below confidence threshold. Demo examples are marked synthetic; they are not real tracking observations. Confirm a match only when the evidence supports it. Identity verification does not start research.</p>
 </header>
 
 <ul class="tabs">
@@ -27,7 +27,7 @@
     <tbody>{% for r in rows %}
       <tr>
         <td class="num">{{ r.created_at|when }}</td>
-        <td><a href="/review/{{ r.id }}">Review #{{ r.id }}</a><span class="rv-sub">{{ r.analysis.practice_name_raw or 'No practice name' }}{% if r.analysis.domain_or_org_hint %} · {{ r.analysis.domain_or_org_hint }}{% endif %}</span><span class="rv-sub">Reference: {{ r.lead_id }}</span></td>
+        <td><a href="/review/{{ r.id }}">Review #{{ r.id }}</a>{% if r.is_demo %} <span class="badge warm">synthetic demo</span>{% endif %}<span class="rv-sub">{{ r.analysis.practice_name_raw or 'No practice name' }}{% if r.analysis.domain_or_org_hint %} · {{ r.analysis.domain_or_org_hint }}{% endif %}</span><span class="rv-sub">Reference: {{ r.lead_id }}</span></td>
         <td>{{ r.analysis.threshold_reasons|join(', ') or 'No qualifying reasons' }}</td>
         <td>{{ '%.0f'|format(r.analysis.identification_confidence * 100) }}% confidence{% if r.analysis.location_hint %}<span class="rv-sub">{{ r.analysis.location_hint }}</span>{% endif %}</td>
         <td>{% if r.review_status == 'pending' %}<span class="badge warm">pending</span>{% elif r.review_status == 'identity_verified' %}<span class="badge approved">verified</span><span class="rv-sub">{{ r.practice_name or 'practice selected' }}</span>{% else %}<span class="badge rejected">closed</span>{% endif %}</td>

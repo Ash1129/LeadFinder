@@ -125,6 +125,22 @@ def test_missing_lead_is_a_404(sdr):
 
 
 # ---------------- visit-analysis integration and human review ----------------
+def test_demo_starts_with_labeled_review_examples(app, sdr):
+    rows = app.state.conn.execute(
+        "SELECT review_status, COUNT(*) n FROM visit_analyses WHERE is_demo=1 GROUP BY review_status"
+    ).fetchall()
+    assert {row["review_status"]: row["n"] for row in rows} == {
+        "pending": 2, "identity_verified": 1, "closed": 1
+    }
+    queue = sdr.get("/review-queue")
+    assert "2 pending" in queue.text and "synthetic demo" in queue.text
+    review_id = app.state.conn.execute(
+        "SELECT id FROM visit_analyses WHERE is_demo=1 AND review_status='pending' ORDER BY id LIMIT 1"
+    ).fetchone()["id"]
+    detail = sdr.get(f"/review/{review_id}")
+    assert "Synthetic demo case" in detail.text and "not collected from a real visitor" in detail.text
+
+
 def review_payload(request_id="visit-request-1"):
     now = time.time()
     return {
@@ -196,7 +212,7 @@ def test_unverified_or_unsanitized_visits_cannot_enter_review_queue(app, sdr):
     response = sdr.post("/api/visit-analysis", json=payload)
     assert response.status_code == 200
     assert response.json()["routing_decision"] == "stop" and response.json()["persisted"] is False
-    assert app.state.conn.execute("SELECT COUNT(*) n FROM visit_analyses").fetchone()["n"] == 0
+    assert app.state.conn.execute("SELECT COUNT(*) n FROM visit_analyses WHERE is_demo=0").fetchone()["n"] == 0
 
     low_intent = review_payload("low-intent-request")
     low_intent["page_views"] = [
@@ -206,8 +222,8 @@ def test_unverified_or_unsanitized_visits_cannot_enter_review_queue(app, sdr):
     response = sdr.post("/api/visit-analysis", json=low_intent)
     assert response.status_code == 200
     assert response.json()["routing_decision"] == "stop" and response.json()["persisted"] is False
-    assert app.state.conn.execute("SELECT COUNT(*) n FROM visit_analyses").fetchone()["n"] == 0
-    assert "0 pending" in sdr.get("/review-queue").text
+    assert app.state.conn.execute("SELECT COUNT(*) n FROM visit_analyses WHERE is_demo=0").fetchone()["n"] == 0
+    assert "2 pending" in sdr.get("/review-queue").text
 
 
 def test_visit_analysis_api_requires_login_and_review_close_is_audited(app, sdr):

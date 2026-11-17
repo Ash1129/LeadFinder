@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS visit_analyses(
   lead_id TEXT NOT NULL,
   routing_decision TEXT NOT NULL CHECK(routing_decision='human_review'),
   review_status TEXT NOT NULL CHECK(review_status IN ('pending', 'identity_verified', 'closed')),
+  is_demo INTEGER NOT NULL DEFAULT 0,
   result_json TEXT NOT NULL,
   created_by TEXT NOT NULL REFERENCES staff(username),
   created_at REAL NOT NULL,
@@ -134,7 +135,8 @@ def connect(path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
 # Columns added after the first version: a database made before them gets them here.
 ADDED = {"leads": {"written_by": "TEXT NOT NULL DEFAULT 'template'", "brief": "TEXT", "brief_by": "TEXT",
                    "chance": "REAL", "chance_band": "TEXT", "chance_reasons": "TEXT", "model_version": "TEXT"},
-         "audit": {"written_by": "TEXT", "chance": "REAL", "model_version": "TEXT"}}
+         "audit": {"written_by": "TEXT", "chance": "REAL", "model_version": "TEXT"},
+         "visit_analyses": {"is_demo": "INTEGER NOT NULL DEFAULT 0"}}
 
 
 def _migrate(conn: sqlite3.Connection) -> None:

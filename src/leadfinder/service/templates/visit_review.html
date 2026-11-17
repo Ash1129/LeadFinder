@@ -19,6 +19,7 @@
   <p class="muted">This record contains derived visit features and the allowlisted business hints—not raw page URLs. Do not select a practice based only on a weak name or location match.</p>
 </header>
 
+{% if d.is_demo %}<p class="notice"><b>Synthetic demo case.</b> This example was generated for the UI, not collected from a real visitor or tracking system.</p>{% endif %}
 {% if stale %}<p class="notice warn"><b>This case changed.</b> Reloaded the current status; no second decision was recorded.</p>{% endif %}
 {% if done == 'identity_verified' %}<p class="notice"><b>Identity recorded.</b> The case is linked to the selected practice. This prototype does not automatically start research or create/update a scored lead.</p>{% endif %}
 {% if done == 'closed' %}<p class="notice"><b>Case closed without identity verification.</b> It will not be sent to research.</p>{% endif %}

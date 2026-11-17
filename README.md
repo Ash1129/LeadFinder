@@ -95,6 +95,8 @@ Open http://127.0.0.1:8010. The first start takes a few seconds while the model 
 from the database. On first start an empty `data/leadfinder.db` is also filled with 40 synthetic practices, their
 visits, their scored leads and call briefs (no emails: those are written on request), and the demo logins listed on the login page (`riley` and `jo` are SDRs,
 `morgan` is the sales manager; the password is `leadfinder`). Set `LEADFINDER_DEMO=0` to start empty instead.
+Demo mode also seeds two pending identity-review examples, one verified example, and one closed example. Each is
+marked **synthetic demo** in the review UI and is not a real visitor or tracking observation.
 
 ### Sending visit analyses to the gate
 

@@ -10,7 +10,8 @@ target design must not be described as functionality that already runs.
 - **Inputs and research:** the app uses seeded, synthetic practice records and flat page/timestamp visits. There is
   no real NPPES import or visitor/session identity source. The authenticated `POST /api/visit-analysis` endpoint
   runs the deterministic gate and persists only scrubbed, behavior-qualified review cases; those cases appear in a
-  SQLite-backed Visit review queue. SDRs may link a case to an existing practice or close it with a reason. The
+  SQLite-backed Visit review queue. Demo mode seeds labeled synthetic examples for the pending, verified, and
+  closed UI states. SDRs may link a case to an existing practice or close it with a reason. The
   app does not scrub input or start research after a resolution. The bounded research module defines the agent
   loop, match safeguards, source-tagged result and website EHR extraction, but has no real directory adapter.
 - **Scoring:** a hand-set points table and an explainable logistic-regression scorer rank all seeded practices.
