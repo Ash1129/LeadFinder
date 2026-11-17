@@ -11,7 +11,7 @@
 <header class="rv-head">
   <p class="kicker">Visit review · {{ counts.pending }} pending</p>
   <h1 class="title">{{ rows|length }} case{{ 's' if rows|length != 1 }} {{ labels[status] }}</h1>
-  <p class="muted rv-note">These are scrubbed visits whose behavior met the intent rule but whose practice identity was unresolved or below confidence threshold. Demo examples are marked synthetic; they are not real tracking observations. Confirm a match only when the evidence supports it. Identity verification does not start research.</p>
+  <p class="muted rv-note">These are scrubbed visits whose behavior met the intent rule but whose practice identity was unresolved or below confidence threshold. Demo examples are marked synthetic; they are not real tracking observations. Confirm a match only when the evidence supports it. Verification attaches derived visit categories to the selected local practice and runs the shared lead-scoring handoff; it does not perform external research.</p>
 </header>
 
 <ul class="tabs">

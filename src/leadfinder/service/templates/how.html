@@ -19,35 +19,167 @@
 .hw-table{min-width:640px;max-width:920px}
 .hw-table td{padding:12px 16px 12px 0;vertical-align:top}.hw-table td:last-child,.hw-table th:last-child{padding-right:0}
 .hw-table td:first-child{font-weight:600;white-space:nowrap}
+.workflow-figure{margin:0;max-width:1100px}
+.workflow-svg{display:block;width:100%;min-width:900px;height:auto;border:1px solid var(--line);border-radius:4px;background:var(--bg)}
+.workflow-svg text{fill:var(--ink);font-family:var(--body)}
+.workflow-svg .wf-title{font-size:17px;font-weight:600}
+.workflow-svg .wf-sub{font-size:13px;fill:var(--muted)}
+.workflow-svg .wf-edge{fill:none;stroke:var(--muted);stroke-width:2;marker-end:url(#wf-arrow)}
+.workflow-svg .wf-branch{fill:none;stroke:var(--muted);stroke-width:2}
+.workflow-svg .wf-node rect{fill:var(--surface);stroke:var(--line);stroke-width:2;rx:8}
+.workflow-svg .wf-code rect{stroke:var(--accent)}
+.workflow-svg .wf-agent rect{fill:var(--accentSoft);stroke:var(--accent)}
+.workflow-svg .wf-human rect{stroke:var(--ink)}
+.workflow-svg .wf-planned rect{fill:var(--bg);stroke:var(--muted);stroke-dasharray:7 5}
+.workflow-svg .wf-planned .wf-sub{font-style:italic}
+.wf-caption{margin-top:8px;color:var(--muted);font-size:14px;line-height:20px;max-width:900px}
 @media (max-width:640px){.hw-facts{grid-template-columns:1fr}.hw-facts dd{border-top:0;padding-top:0}.hw-path>li{grid-template-columns:32px minmax(0,1fr)}.hw-path .num{grid-column:2}}
 {% endblock %}
 {% block body %}
 <header class="hw-head">
   <p class="kicker">How it works</p>
   <h1 class="title">Code finds and ranks the practices; a person asks for each email and approves it</h1>
-  <p class="muted">Five steps from a visit to the site to an email marked ready to send · nothing is sent from here<sup class="fn"><a href="#fn-send" aria-label="footnote 1">1</a></sup></p>
+  <p class="muted">Submitted visits pass an intent gate before practice matching; the existing demo leads show the downstream scoring and review steps · nothing is sent from here<sup class="fn"><a href="#fn-send" aria-label="footnote 1">1</a></sup></p>
 </header>
 
 <hr class="rule">
 
+<section class="hw-sec" aria-labelledby="workflow-graph-title">
+  <h2 id="workflow-graph-title" class="kicker">Workflow graph · active nodes, agents, and the planned research node</h2>
+  <div class="scroll">
+    <figure class="workflow-figure">
+      <svg class="workflow-svg" viewBox="0 0 1000 1010" role="img" aria-labelledby="workflow-title workflow-desc">
+        <title id="workflow-title">LeadFinder workflow from visit intent to human email decision</title>
+        <desc id="workflow-desc">Submitted visits first pass through a deterministic intent gate. Low intent or unsanitized visits stop. Qualified uncertain visits go to human identity review; qualified identified visits go to exact local practice matching. Both verified routes and the already-identified synthetic demo records feed the same local visit handoff, then parallel model and points scoring, optional writing, checks, and SDR decision. A separate ResearchAgent is not connected to this running workflow.</desc>
+        <defs>
+          <marker id="wf-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="var(--muted)"></path>
+          </marker>
+        </defs>
+        <path class="wf-edge" d="M500 84 V110"></path>
+        <path class="wf-branch" d="M500 178 V218 M145 218 H855"></path>
+        <path class="wf-edge" d="M145 218 V245"></path>
+        <path class="wf-edge" d="M500 218 V245"></path>
+        <path class="wf-edge" d="M855 218 V245"></path>
+        <path class="wf-edge" d="M500 315 V390"></path>
+        <path class="wf-edge" d="M855 315 V355 H615 V390"></path>
+        <path class="wf-edge" d="M255 426 H385"></path>
+        <path class="wf-branch" d="M500 462 V490 M340 490 H660"></path>
+        <path class="wf-edge" d="M340 490 V520"></path>
+        <path class="wf-edge" d="M660 490 V520"></path>
+        <path class="wf-branch" d="M340 590 V620 M660 590 V620 M340 620 H660"></path>
+        <path class="wf-edge" d="M500 620 V650"></path>
+        <path class="wf-edge" d="M500 715 V740"></path>
+        <path class="wf-edge" d="M500 805 V835"></path>
+        <path class="wf-edge" d="M500 900 V925"></path>
+
+        <g class="wf-node wf-code">
+          <rect x="385" y="20" width="230" height="64"></rect>
+          <text class="wf-title" x="500" y="47" text-anchor="middle">Submitted visit</text>
+          <text class="wf-sub" x="500" y="68" text-anchor="middle">caller asserts scrubbed input</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="385" y="110" width="230" height="68"></rect>
+          <text class="wf-title" x="500" y="138" text-anchor="middle">Intent gate</text>
+          <text class="wf-sub" x="500" y="161" text-anchor="middle">deterministic pages / sessions</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="35" y="245" width="220" height="70"></rect>
+          <text class="wf-title" x="145" y="273" text-anchor="middle">STOP</text>
+          <text class="wf-sub" x="145" y="296" text-anchor="middle">stop · low intent / unsanitized</text>
+        </g>
+        <g class="wf-node wf-human">
+          <rect x="390" y="245" width="220" height="70"></rect>
+          <text class="wf-title" x="500" y="273" text-anchor="middle">Human identity review</text>
+          <text class="wf-sub" x="500" y="296" text-anchor="middle">human_review · qualified, uncertain</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="745" y="245" width="220" height="70"></rect>
+          <text class="wf-title" x="855" y="273" text-anchor="middle">Exact local match</text>
+          <text class="wf-sub" x="855" y="296" text-anchor="middle">research · qualified, identified</text>
+        </g>
+        <text class="wf-sub" x="520" y="352">after reviewer verifies an existing practice</text>
+        <g class="wf-node wf-code">
+          <rect x="35" y="390" width="220" height="72"></rect>
+          <text class="wf-title" x="145" y="418" text-anchor="middle">Seeded demo data</text>
+          <text class="wf-sub" x="145" y="441" text-anchor="middle">synthetic identity already linked</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="385" y="390" width="230" height="72"></rect>
+          <text class="wf-title" x="500" y="418" text-anchor="middle">Local visit handoff</text>
+          <text class="wf-sub" x="500" y="441" text-anchor="middle">derived pages + practice facts</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="745" y="390" width="220" height="72"></rect>
+          <text class="wf-title" x="855" y="418" text-anchor="middle">ResearchAgent</text>
+          <text class="wf-sub" x="855" y="441" text-anchor="middle">standalone; not wired into app</text>
+        </g>
+        <g class="wf-node wf-agent">
+          <rect x="225" y="520" width="230" height="70"></rect>
+          <text class="wf-title" x="340" y="548" text-anchor="middle">Logistic regression</text>
+          <text class="wf-sub" x="340" y="571" text-anchor="middle">AI conversion chance</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="545" y="520" width="230" height="70"></rect>
+          <text class="wf-title" x="660" y="548" text-anchor="middle">Points table</text>
+          <text class="wf-sub" x="660" y="571" text-anchor="middle">rules-based comparison score</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="385" y="650" width="230" height="65"></rect>
+          <text class="wf-title" x="500" y="678" text-anchor="middle">Ranked lead</text>
+          <text class="wf-sub" x="500" y="700" text-anchor="middle">chance, points, and reasons</text>
+        </g>
+        <g class="wf-node wf-agent">
+          <rect x="385" y="740" width="230" height="65"></rect>
+          <text class="wf-title" x="500" y="768" text-anchor="middle">Draft on request</text>
+          <text class="wf-sub" x="500" y="790" text-anchor="middle">optional Claude or template</text>
+        </g>
+        <g class="wf-node wf-code">
+          <rect x="385" y="835" width="230" height="65"></rect>
+          <text class="wf-title" x="500" y="863" text-anchor="middle">Content guardrails</text>
+          <text class="wf-sub" x="500" y="885" text-anchor="middle">check before keeping draft</text>
+        </g>
+        <g class="wf-node wf-human">
+          <rect x="385" y="925" width="230" height="65"></rect>
+          <text class="wf-title" x="500" y="953" text-anchor="middle">SDR approves or rejects</text>
+          <text class="wf-sub" x="500" y="975" text-anchor="middle">logged; nothing is sent</text>
+        </g>
+      </svg>
+      <figcaption class="wf-caption">Solid arrows are active in the demo. Dashed node: the bounded ResearchAgent exists as a standalone module but is not connected to this application workflow. Seeded synthetic leads start with identity already linked and bypass the visit gate.</figcaption>
+    </figure>
+  </div>
+</section>
+
 <section class="hw-sec">
-  <h2 id="hw-path" class="kicker">The path of a lead · five steps{% call note('path-note', 'Who does each step') %}<span class="ln">Code: fixed rules, the same answer every time. Model: the trained scorer, a logistic regression. Claude: the language model, used only for words and only when asked. Person: an SDR, who decides.</span><span class="ln">The count on the right is how far the leads in this database have come.</span>{% endcall %}</h2>
+  <h2 class="kicker">Submitted visits · intent gate before practice lookup</h2>
+  <p>The deterministic gate analyzes visit behavior first. It is not the conversion scorer: it decides whether the visit has enough intent to proceed. No local practice match or lead score happens before this gate.</p>
+  <dl class="hw-facts">
+    <dt>Qualified and confidently identified</dt><dd>The gate returns <code>research</code>. The current demo then attempts a unique exact local practice-name match, narrowed by location when supplied; only after a match does it attach derived visit categories and create or rescore the lead. This is a local synthetic-record lookup, not external research.</dd>
+    <dt>Qualified, identity uncertain</dt><dd>The gate returns <code>human_review</code>. No practice-specific lookup or scoring happens until an SDR verifies an existing local practice; then the same visit-attachment and lead-scoring handoff runs.</dd>
+    <dt>Low intent or not marked scrubbed</dt><dd>The gate returns <code>stop</code>. The app does not match a practice or score a lead for that visit.</dd>
+    <dt>After the handoff</dt><dd>The trained model's conversion chance and the points-table score rank the identified practice. They are separate from the gate's intent decision.</dd>
+  </dl>
+</section>
+
+<section class="hw-sec">
+  <h2 id="hw-path" class="kicker">Already-identified demo leads · five downstream steps{% call note('path-note', 'Who does each step') %}<span class="ln">Code: fixed rules, the same answer every time. Model: the trained scorer, a logistic regression. Claude: the language model, used only for words and only when asked. Person: an SDR, who decides.</span><span class="ln">The count on the right is how far the leads in this database have come. The seeded demo starts with synthetic practice identities already attached; its sample visits were not run through the gate above.</span>{% endcall %}</h2>
+  <p>The existing seeded leads start after identity is known. The five steps below describe that downstream workflow; a newly submitted visit must pass the gate above first.</p>
   <ol class="hw-path">
     <li>
-      <div><b>A practice visits the site</b><span class="hw-by">Code</span>
-        <span class="hw-what">Each visit is tied to a practice: which page, and when. The demo and pricing pages say more than the blog.</span>
+      <div><b>Visit history is already linked</b><span class="hw-by">Demo data</span>
+        <span class="hw-what">The seeded synthetic visits already have a practice identity: which page, and when. The demo and pricing pages say more than the blog.</span>
         <span class="hw-io">Reads the visit log · gives the pages seen and how lately</span></div>
       <span class="num">{{ '{:,}'.format(stages.visits) }} visits</span>
     </li>
     <li>
-      <div><b>The practice is looked up</b><span class="hw-by">Code</span>
-        <span class="hw-what">Its registry record is attached: specialty, number of providers, city and state, the EHR it runs, and a business contact<sup class="fn"><a href="#fn-npi" aria-label="footnote 2">2</a></sup>.</span>
-        <span class="hw-io">Reads the NPI-style record · gives public business facts, nothing about patients</span></div>
+      <div><b>The local practice record is available</b><span class="hw-by">Demo data</span>
+        <span class="hw-what">The demo's synthetic registry-style record is already attached: specialty, number of providers, city and state, the EHR it runs, and a business contact<sup class="fn"><a href="#fn-npi" aria-label="footnote 2">2</a></sup>. For submitted visits, local matching happens only after the intent gate qualifies and identity is resolved.</span>
+        <span class="hw-io">Reads the local NPI-style record · gives business facts, nothing about patients</span></div>
       <span class="num">{{ stages.practices }} practices</span>
     </li>
     <li>
-      <div><b>The lead is scored</b><span class="hw-by">Model</span>
-        <span class="hw-what">A trained model turns those facts into a chance of converting and lists what pushed it up or down. A hand-set points table scores the same facts beside it.</span>
+      <div><b>The identified lead is scored</b><span class="hw-by">Model</span>
+        <span class="hw-what">After identity and the gate, a trained model turns the practice facts and visits into a chance of converting and lists what pushed it up or down. A hand-set points table scores the same facts beside it.</span>
         <span class="hw-io">Reads the record and the visits · gives a chance, a band (hot, warm, cool) and the reasons</span></div>
       <span class="num">{{ stages.scored }} scored</span>
     </li>
@@ -68,10 +200,10 @@
 
 <section class="hw-sec">
   <h2 id="hw-review" class="kicker">Identity review · {{ review_count }} pending</h2>
-  <p>A logged-in staff client submits already-scrubbed visit data to <code>POST /api/visit-analysis</code>. If behavior qualifies but identity is missing or uncertain, the gate stores a review case in SQLite. An SDR can open <a href="/review-queue">Visit review</a>, verify it against an existing practice, or close it with a reason. The decision records who acted and when.</p>
+  <p>A logged-in staff client submits visit data to <code>POST /api/visit-analysis</code>; the intent gate runs before any practice matching. If behavior qualifies but identity is missing or uncertain, the gate stores a review case in SQLite. An SDR can open <a href="/review-queue">Visit review</a>, verify it against an existing practice, or close it with a reason. The decision records who acted and when.</p>
   <dl class="hw-facts">
     <dt>Before submission</dt><dd>The caller must allowlist and scrub the data. The API trusts `patient_data_stripped`; it is not a scrubber. Unsanitized submissions stop and are not persisted.</dd>
-    <dt>After identity verification</dt><dd>The case links to the selected existing practice and may link to its existing scored lead. It does not create a new practice, launch research, or change a lead's score.</dd>
+    <dt>After identity verification</dt><dd>The case's derived visit categories are attached to the selected local practice, then the shared handoff creates or rescores its lead. An automatically identified, intent-qualified visit uses the same routine after a unique exact local name match, narrowed by location when supplied. This demo lookup is synthetic and does not launch external research or create a new practice.</dd>
     <dt>Unresolved after review</dt><dd>Close the case with a reason. No practice-specific research runs.</dd>
   </dl>
 </section>
@@ -119,7 +251,7 @@
       <tbody>
         <tr><td>Practices</td><td>Made up, with the registry's fields and an NPI that passes the check digit</td><td>Looked up in the NPPES registry</td></tr>
         <tr><td>Visits</td><td>Made up, over the last three weeks</td><td>Read from the site's visitor-tracking tool</td></tr>
-        <tr><td>Identity review</td><td>Authenticated API, SQLite queue, SDR verification or closure; no research starts</td><td>Approved identity source, new-practice handling, and an explicit research handoff</td></tr>
+        <tr><td>Identity review</td><td>Authenticated API, SQLite queue, SDR verification or closure; verified and uniquely matched automatic identities share local visit attachment and scoring</td><td>Approved identity source, new-practice handling, and integration of the real directory-backed research agent</td></tr>
         <tr><td>The model's training</td><td>A simulated history of won and lost leads, a new version each simulated month, a scorecard deciding which is live</td><td>Retrained on what SDRs approved and rejected, through the same scorecard</td></tr>
         <tr><td>The benchmark</td><td>The model, the points table and a second model, on the same held-out leads</td><td>Claude's own ranking of those leads, as a fourth row</td></tr>
         <tr><td>Writing</td><td>{{ 'Claude, on request, checked by code' if writer.is_model else 'A template, on request; Claude once a credential is set' }}</td><td>The same</td></tr>

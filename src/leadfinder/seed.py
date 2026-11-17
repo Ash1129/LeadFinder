@@ -22,6 +22,20 @@ from .writer import Offline
 
 FIRST = ["Alex", "Jordan", "Priya", "Marcus", "Elena", "Sam", "Tara", "Devon", "Lena", "Omar", "Grace", "Hugo"]
 LAST = ["Nguyen", "Patel", "Okafor", "Silva", "Kowalski", "Bennett", "Haddad", "Larsen", "Moreau", "Ito"]
+VISIT_PAGES = {
+    "demo_or_trial": "/demo",
+    "pricing": "/pricing",
+    "ehr_integration": "/integrations",
+    "usability": "/features",
+    "blog": "/blog",
+    "security": "/security",
+    "billing": "/billing",
+    "specialty_case_study": "/case-studies",
+    "careers": "/careers",
+    "about": "/about",
+    "homepage": "/",
+    "unmapped": "/unmapped",
+}
 
 
 def npi_check_digit(first9: str) -> int:
@@ -73,6 +87,118 @@ def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None
     leads = score_all(conn, now=now)
     apply_model(conn, now=now)
     return {"practices": n, "visits": visits_made, "leads": leads}
+
+
+def process_local_visit_handoff(
+    conn: sqlite3.Connection,
+    *,
+    request_id: str,
+    visitor_ref: str,
+    practice_id: int,
+    analysis: dict,
+    identity_method: str,
+    created_by: str,
+    is_demo: bool = False,
+    now: float | None = None,
+) -> dict:
+    """Use a verified local practice record, attach gate views, and create or refresh its scored lead."""
+    if identity_method not in ("automatic", "human_review"):
+        raise ValueError("identity_method must be automatic or human_review")
+    now = time.time() if now is None else now
+    analysis_json = json.dumps(analysis, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    existing = conn.execute("SELECT * FROM lead_handoffs WHERE request_id=?", (request_id,)).fetchone()
+    if existing is not None:
+        if (existing["analysis_json"] != analysis_json or existing["practice_id"] != practice_id or
+                existing["identity_method"] != identity_method):
+            raise ValueError("request_id was already used for a different verified visit")
+        lead = conn.execute(
+            "SELECT score, chance, model_version FROM leads WHERE id=?", (existing["lead_record_id"],)
+        ).fetchone()
+        return dict(existing) | (dict(lead) if lead else {})
+
+    practice_row = conn.execute("SELECT * FROM practices WHERE id=?", (practice_id,)).fetchone()
+    if practice_row is None:
+        raise LookupError("verified practice no longer exists in the local practice table")
+    practice = dict(practice_row)
+    for view in analysis["pages_viewed"]:
+        page = VISIT_PAGES.get(view["category"], "/unmapped")
+        conn.execute(
+            "INSERT INTO visits(practice_id, page, at, source_request_id, source_view_id) VALUES(?,?,?,?,?) "
+            "ON CONFLICT(source_request_id, source_view_id) DO NOTHING",
+            (practice_id, page, view["viewed_at"], request_id, view["view_id"]),
+        )
+
+    visit_rows = conn.execute(
+        "SELECT page, at FROM visits WHERE practice_id=? ORDER BY at", (practice_id,)
+    ).fetchall()
+    visits = [(row["page"], row["at"]) for row in visit_rows]
+    score = score_practice(practice["specialty"], practice["providers"], practice["ehr"], visits, now=now)
+    reasons = [reason.as_dict() for reason in score.reasons]
+    model = ml.load(conn)
+    if model is None:
+        raise RuntimeError("the lead model is not available for scoring")
+    prediction = ml.predict(model, practice, visits, now=now)
+
+    lead = conn.execute("SELECT id, brief_by, status, subject, body FROM leads WHERE practice_id=?",
+                        (practice_id,)).fetchone()
+    if lead is None:
+        pages = [page for page, _ in visits]
+        brief = Offline().brief(practice, reasons, pages)
+        cursor = conn.execute(
+            "INSERT INTO leads(practice_id, score, band, reasons, subject, body, status, scored_at, written_by, brief, "
+            "brief_by, chance, chance_band, chance_reasons, model_version) "
+            "VALUES(?,?,?,?,?,'','new',?,'',?,?,?,?,?,?)",
+            (practice_id, score.total, score.band, json.dumps(reasons), "", now, json.dumps(brief), "template",
+             prediction["chance"], prediction["band"], json.dumps(prediction["reasons"]), prediction["version"]),
+        )
+        lead_id = cursor.lastrowid
+    else:
+        lead_id = lead["id"]
+        conn.execute(
+            "UPDATE leads SET score=?, band=?, reasons=?, scored_at=?, chance=?, chance_band=?, chance_reasons=?, "
+            "model_version=? WHERE id=?",
+            (score.total, score.band, json.dumps(reasons), now, prediction["chance"], prediction["band"],
+             json.dumps(prediction["reasons"]), prediction["version"], lead_id),
+        )
+        if lead["status"] == "new" and not lead["subject"] and not lead["body"] and lead["brief_by"] == "template":
+            pages = [page for page, _ in visits]
+            brief = Offline().brief(practice, reasons, pages)
+            conn.execute("UPDATE leads SET brief=? WHERE id=?", (json.dumps(brief), lead_id))
+
+    record = {
+        "source": practice["source"],
+        "practice_id": practice["id"],
+        "npi": practice["npi"],
+        "name": practice["name"],
+        "specialty": practice["specialty"],
+        "providers": practice["providers"],
+        "city": practice["city"],
+        "state": practice["state"],
+        "ehr": practice["ehr"],
+        "ehr_source": practice["source"] if practice["ehr"] else "unknown",
+        "external_research_performed": False,
+    }
+    record_json = json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    cursor = conn.execute(
+        "INSERT INTO lead_handoffs(request_id, visitor_ref, identity_method, practice_id, lead_record_id, analysis_json, "
+        "practice_record_json, created_by, created_at, is_demo) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (request_id, visitor_ref, identity_method, practice_id, lead_id, analysis_json, record_json,
+         created_by, now, int(is_demo)),
+    )
+    return {
+        "id": cursor.lastrowid,
+        "request_id": request_id,
+        "practice_id": practice_id,
+        "lead_record_id": lead_id,
+        "identity_method": identity_method,
+        "analysis_json": analysis_json,
+        "practice_record_json": record_json,
+        "created_at": now,
+        "is_demo": int(is_demo),
+        "score": score.total,
+        "chance": prediction["chance"],
+        "model_version": prediction["version"],
+    }
 
 
 def seed_demo_review_cases(conn: sqlite3.Connection, now: float | None = None) -> int:
@@ -169,6 +295,25 @@ def seed_demo_review_cases(conn: sqlite3.Connection, now: float | None = None) -
              created_at + 600 if resolved else None, case["note"]),
         )
         made += cur.rowcount
+    for row in conn.execute(
+        "SELECT id, request_id, lead_id, practice_id, result_json FROM visit_analyses "
+        "WHERE is_demo=1 AND review_status='identity_verified' AND handoff_status='not_started'"
+    ).fetchall():
+        handoff = process_local_visit_handoff(
+            conn,
+            request_id=row["request_id"],
+            visitor_ref=row["lead_id"],
+            practice_id=row["practice_id"],
+            analysis=json.loads(row["result_json"]),
+            identity_method="human_review",
+            created_by="morgan",
+            is_demo=True,
+            now=now,
+        )
+        conn.execute(
+            "UPDATE visit_analyses SET handoff_status='complete', lead_record_id=?, handoff_note=NULL WHERE id=?",
+            (handoff["lead_record_id"], row["id"]),
+        )
     return made
 
 

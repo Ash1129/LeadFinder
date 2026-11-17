@@ -11,8 +11,11 @@ target design must not be described as functionality that already runs.
   no real NPPES import or visitor/session identity source. The authenticated `POST /api/visit-analysis` endpoint
   runs the deterministic gate and persists only scrubbed, behavior-qualified review cases; those cases appear in a
   SQLite-backed Visit review queue. Demo mode seeds labeled synthetic examples for the pending, verified, and
-  closed UI states. SDRs may link a case to an existing practice or close it with a reason. The
-  app does not scrub input or start research after a resolution. The bounded research module defines the agent
+  closed UI states. SDRs may link a case to an existing practice or close it with a reason. A verified identity
+  attaches derived page categories to the local practice and creates or rescores its lead; an automatically
+  identified visit uses that same routine only after a unique exact local name/location match. This handoff uses
+  the synthetic local table and scoring logic, not external research. The app does not scrub input. The bounded
+  research module defines the agent
   loop, match safeguards, source-tagged result and website EHR extraction, but has no real directory adapter.
 - **Scoring:** a hand-set points table and an explainable logistic-regression scorer rank all seeded practices.
   Their benchmark, including a gradient-boosted challenger, uses synthetic outcomes and held-out synthetic leads;
@@ -125,10 +128,11 @@ those decisions are made.
 | **Cross-module result shape** | Both standalone modules expose `as_dict()` output, but the field names and nesting have not been adopted as a shared lead-state schema. | Sasha, Daniel, Ashwin, and Mahika should agree on the versioned schema and unknown/partial behavior before graph or scoring integration. Update tests and schema versions when the agreed shape changes. |
 
 The research loop and visit-analysis/gate module are implemented and have focused unit tests. The authenticated
-gate API, SQLite review queue, reviewer decisions, persona simulator, and synthetic evaluation also exist;
-taxonomy v2 is applied in the gate. The research loop's concrete directory adapter, real identity source,
-ingestion-time scrubber, automatic handoff after verification, LangGraph orchestration, and the open contracts
-above are not. The simulated gate results have not been validated on real visits or URL traffic. Until these
+gate API, SQLite review queue, reviewer decisions, a shared synthetic-local lead handoff for human-confirmed and
+exactly matched automatic identities, persona simulator, and synthetic evaluation also exist; taxonomy v2 is
+applied in the gate. The research loop's concrete directory adapter, real identity source, ingestion-time scrubber,
+external research integration, LangGraph orchestration, and the open contracts above are not. The simulated gate
+results have not been validated on real visits or URL traffic. Until these
 items are closed, keep the current prototype runnable and clearly label remaining graph/research work as planned.
 Do not substitute synthetic identification assumptions for measured coverage or make an unknown EHR into a
 guessed fact.
@@ -142,7 +146,7 @@ evidence in the current checkout from work needed for the brainstorm's target pr
 | --- | --- | --- |
 | **1. Problem definition and AI justification — 15** | README states a health-tech lead-prioritization problem and intended SDR workflow. | State the target-user constraints and desired outcome precisely; justify learned ranking and constrained text generation against a simpler rules-only workflow, and scope what can be completed in the project timeline. |
 | **2. AI solution design and reasoning — 20** | Explainable logistic regression is compared with a points table and tree challenger; current UI documents the five-step prototype; the bounded research loop is specified in code. | Publish the final graph/data flows. Explain why visit analysis is deterministic, how the bounded tool-using research module uses evidence and match safeguards, and why human approval is retained. |
-| **3. AI implementation and integration — 35** | Working FastAPI/SQLite prototype, model training/serving, optional Anthropic writing, tested content checks and human decisions; authenticated visit-analysis API, persisted SQLite review queue, reviewer verification/closure UI, standalone research module, persona simulator and evaluation CLI. | The endpoint trusts a caller scrub assertion; there is no real identity source or research handoff after verification. Research has no real directory adapter, and LangGraph integration is not implemented. The LLM scoring comparison, revision loop, and send workflow are also open. Demonstrate the functioning review path without presenting planned steps as complete. |
+| **3. AI implementation and integration — 35** | Working FastAPI/SQLite prototype, model training/serving, optional Anthropic writing, tested content checks and human decisions; authenticated visit-analysis API, persisted SQLite review queue, reviewer verification/closure UI, a shared synthetic-local scoring handoff for human-confirmed and exact-match automatic identities, standalone research module, persona simulator and evaluation CLI. | The endpoint trusts a caller scrub assertion; there is no real identity source, external research integration, real directory adapter, or LangGraph workflow. The LLM scoring comparison, revision loop, and send workflow are also open. Demonstrate the functioning local handoff without presenting it as live research. |
 | **4. Testing, evaluation, iterative improvement — 25** | Tests cover the research loop with fake adapters, visit-analysis features/gate edge cases, persona-based gate/taxonomy/matching evaluation, and held-out synthetic scorer comparisons. The taxonomy v2 change was prompted by observed simulated false passes. | Validate persona assumptions and taxonomy on representative real URLs/data; measure real identity coverage, threshold and match behavior, failure/latency evidence, and safety. Synthetic-label metrics are not real-world effectiveness evidence. |
 | **5. Responsible AI, ethics, alignment — 15** | Outreach text is checked; generation uses selected business facts; human review is required; sending is disabled; visit analysis fails closed on an input marked unsanitized; limitations of simulated conversion are disclosed. | Implement and test actual pre-model ingestion minimization/scrubbing (the gate's boolean is only a contract), provenance/confidence and unknown handling, match ambiguity review, bounded retries, and explicit failure reporting. Discuss privacy, bias, false identification, hallucinations, and misuse. |
 | **6. Documentation and reproducibility — 10** | README has setup/configuration/test instructions; seeded synthetic generation and model versions support repeatability. This handoff records design status and unresolved interfaces. | Document final architecture, data/model/prompt versions, external services, graph configuration, evaluation procedure/results, and any access/setup requirements after decisions are closed. |

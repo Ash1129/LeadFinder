@@ -21,8 +21,10 @@
 
 {% if d.is_demo %}<p class="notice"><b>Synthetic demo case.</b> This example was generated for the UI, not collected from a real visitor or tracking system.</p>{% endif %}
 {% if stale %}<p class="notice warn"><b>This case changed.</b> Reloaded the current status; no second decision was recorded.</p>{% endif %}
-{% if done == 'identity_verified' %}<p class="notice"><b>Identity recorded.</b> The case is linked to the selected practice. This prototype does not automatically start research or create/update a scored lead.</p>{% endif %}
+{% if done == 'identity_verified' %}<p class="notice"><b>Identity recorded.</b> The case now uses the same local-practice handoff as an automatically identified visit.</p>{% endif %}
 {% if done == 'closed' %}<p class="notice"><b>Case closed without identity verification.</b> It will not be sent to research.</p>{% endif %}
+{% if request.query_params.get('handoff') == 'complete' %}<p class="notice"><b>Handoff completed.</b> The local practice's lead was processed or rescored.</p>{% endif %}
+{% if request.query_params.get('handoff') == 'failed' %}<p class="notice warn"><b>Handoff retry failed.</b> Review the error below and retry after resolving it.</p>{% endif %}
 
 <section class="vr-sec">
   <h2 class="kicker">What the gate saw</h2>
@@ -88,8 +90,24 @@
   <h2 class="kicker">Recorded resolution</h2>
   <p><b>{{ d.practice_name }}</b> · {{ d.city }}, {{ d.state }} · selected by {{ d.reviewer }} at {{ d.resolved_at|when }} UTC.</p>
   {% if d.resolution_note %}<p class="muted">{{ d.resolution_note }}</p>{% endif %}
-  {% if d.lead %}<p><a class="btn" href="/lead/{{ d.lead.id }}">Open existing scored lead</a></p>{% else %}<p class="muted">No scored lead exists for this practice.</p>{% endif %}
-  <p class="notice"><b>Next step remains manual.</b> Research is not started by this resolution; the application still needs an approved directory adapter and a defined research handoff.</p>
+  {% if d.handoff_status == 'complete' and d.handoff %}
+  <p class="notice"><b>Local synthetic-record handoff complete.</b> This is a lookup in the app's practice table plus visit attachment and lead scoring—not external web research.</p>
+  <dl class="vr-facts">
+    <dt>Record source</dt><dd>{{ d.handoff.source }}</dd>
+    <dt>Practice record</dt><dd>{{ d.handoff.name }} · {{ d.handoff.specialty }} · {{ d.handoff.city }}, {{ d.handoff.state }}</dd>
+    <dt>EHR</dt><dd>{{ d.handoff.ehr or 'Unknown' }} · source: {{ d.handoff.ehr_source }}</dd>
+    <dt>Lead score</dt><dd>{{ d.lead.score }} points · {{ '%.1f'|format(d.lead.chance * 100) }}% modeled chance · {{ d.lead.model_version }}</dd>
+  </dl>
+  {% if d.lead %}<p><a class="btn" href="/lead/{{ d.lead.id }}">Open processed lead</a></p>{% endif %}
+  {% elif d.handoff_status == 'failed' %}
+  <p class="notice warn"><b>The identity was saved, but lead processing failed.</b> {{ d.handoff_note }}</p>
+  <form class="vr-form" method="post" action="/review/{{ d.id }}/retry-handoff">
+    <button class="btn primary" type="submit">Retry local handoff</button>
+  </form>
+  {% else %}
+  <p class="notice warn">Lead handoff is {{ d.handoff_status }}. No lead result is available yet.</p>
+  {% endif %}
+  <p class="small muted">Identity source: {{ d.identity_method or 'human review' }}. The demo's practice and EHR facts are synthetic; this flow does not claim that a real provider or technology vendor was researched.</p>
 </section>
 {% else %}
 <section class="vr-sec">

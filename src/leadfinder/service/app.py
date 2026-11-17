@@ -31,7 +31,7 @@ from fastapi.templating import Jinja2Templates
 
 from .. import auth, ml, outreach
 from ..db import DEFAULT_DB, connect
-from ..seed import apply_model, seed, seed_demo_review_cases
+from ..seed import apply_model, process_local_visit_handoff, seed, seed_demo_review_cases
 from ..visit_analysis import PageView, VisitAnalysisInput, analyze_visits
 from ..writer import Writer, WriterError, make_writer
 from . import security
@@ -183,9 +183,11 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
 
     def review_row(review_id: int):
         row = conn.execute(
-            "SELECT v.*, p.name AS practice_name, p.city, p.state, s.name AS reviewer "
+            "SELECT v.*, p.name AS practice_name, p.city, p.state, s.name AS reviewer, "
+            "h.practice_record_json, h.identity_method "
             "FROM visit_analyses v LEFT JOIN practices p ON p.id=v.practice_id "
             "LEFT JOIN staff s ON s.username=v.resolved_by "
+            "LEFT JOIN lead_handoffs h ON h.request_id=v.request_id "
             "WHERE v.id=? AND v.routing_decision='human_review'",
             (review_id,),
         ).fetchone()
@@ -193,9 +195,37 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
             raise HTTPException(404, "no such visit review")
         d = dict(row)
         d["analysis"] = json.loads(d["result_json"])
-        d["lead"] = conn.execute("SELECT id FROM leads WHERE practice_id=?", (d["practice_id"],)).fetchone() \
+        d["handoff"] = json.loads(d["practice_record_json"]) if d["practice_record_json"] else None
+        d["lead"] = conn.execute("SELECT id, score, chance, model_version FROM leads WHERE practice_id=?", (d["practice_id"],)).fetchone() \
             if d["practice_id"] is not None else None
         return d
+
+    def exact_practice_match(data: VisitAnalysisInput) -> Optional[int]:
+        """Only auto-link an exact local name match, narrowed by location when supplied."""
+        if not data.practice_name_raw:
+            return None
+        rows = conn.execute("SELECT id, name, city, state FROM practices ORDER BY id").fetchall()
+        matches = [row for row in rows if row["name"].casefold() == data.practice_name_raw.strip().casefold()]
+        if data.location_hint:
+            parts = [part.strip().casefold() for part in data.location_hint.split(",")]
+            if len(parts) >= 2:
+                matches = [row for row in matches
+                           if row["city"].casefold() == parts[0] and row["state"].casefold() == parts[1]]
+            else:
+                matches = [row for row in matches if row["city"].casefold() == parts[0]]
+        return matches[0]["id"] if len(matches) == 1 else None
+
+    def run_handoff(request: Request, review, practice_id: int, identity_method: str) -> dict:
+        return process_local_visit_handoff(
+            conn,
+            request_id=review["request_id"],
+            visitor_ref=review["lead_id"],
+            practice_id=practice_id,
+            analysis=review["analysis"],
+            identity_method=identity_method,
+            created_by=request.state.me.username,
+            is_demo=bool(review["is_demo"]),
+        )
 
     # ---------------- logging in ----------------
     def login_view(request: Request, next_: str, error: str = "", status: int = 200):
@@ -331,6 +361,47 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         review_id = None
         persisted = False
         review_status = None
+        if payload.patient_data_stripped and result.routing_decision == "research":
+            practice_id = exact_practice_match(data)
+            if practice_id is None:
+                return {
+                    "analysis_id": None,
+                    "persisted": False,
+                    "routing_decision": result.routing_decision,
+                    "review_status": None,
+                    "handoff_status": "local_practice_not_found",
+                    "message": "No unique exact match was found in the local practice table; no lead handoff occurred.",
+                    "analysis": result.as_dict(),
+                }
+            try:
+                handoff = process_local_visit_handoff(
+                    conn,
+                    request_id=request_id,
+                    visitor_ref=lead_id,
+                    practice_id=practice_id,
+                    analysis=result.as_dict(),
+                    identity_method="automatic",
+                    created_by=request.state.me.username,
+                )
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            return {
+                "analysis_id": handoff["id"],
+                "persisted": True,
+                "routing_decision": result.routing_decision,
+                "review_status": None,
+                "handoff_status": "complete",
+                "handoff": {
+                    "identity_method": "automatic",
+                    "practice_id": practice_id,
+                    "lead_record_id": handoff["lead_record_id"],
+                    "score": handoff["score"],
+                    "chance": handoff["chance"],
+                    "model_version": handoff["model_version"],
+                    "practice_record": json.loads(handoff["practice_record_json"]),
+                },
+                "analysis": result.as_dict(),
+            }
         if payload.patient_data_stripped and result.routing_decision == "human_review":
             existing = conn.execute(
                 "SELECT id, result_json, review_status FROM visit_analyses WHERE request_id=?", (request_id,)
@@ -379,7 +450,39 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         )
         if cur.rowcount != 1:
             return RedirectResponse(f"/review/{review_id}?stale=1", status_code=303)
+        if decision == "identity_verified":
+            try:
+                handoff = run_handoff(request, d, kw["practice_id"], "human_review")
+            except (ValueError, LookupError, RuntimeError, sqlite3.Error) as exc:
+                conn.execute(
+                    "UPDATE visit_analyses SET handoff_status='failed', handoff_note=? WHERE id=?",
+                    (str(exc)[:500], review_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE visit_analyses SET handoff_status='complete', lead_record_id=?, handoff_note=NULL WHERE id=?",
+                    (handoff["lead_record_id"], review_id),
+                )
         return RedirectResponse(f"/review/{review_id}?done={decision}", status_code=303)
+
+    @app.post("/review/{review_id}/retry-handoff")
+    def retry_visit_handoff(request: Request, review_id: int):
+        allow(request, "act_on_leads")
+        d = review_row(review_id)
+        if d["review_status"] != "identity_verified" or d["handoff_status"] != "failed":
+            return RedirectResponse(f"/review/{review_id}?stale=1", status_code=303)
+        try:
+            handoff = run_handoff(request, d, d["practice_id"], "human_review")
+        except (ValueError, LookupError, RuntimeError, sqlite3.Error) as exc:
+            conn.execute(
+                "UPDATE visit_analyses SET handoff_note=? WHERE id=?", (str(exc)[:500], review_id)
+            )
+            return RedirectResponse(f"/review/{review_id}?handoff=failed", status_code=303)
+        conn.execute(
+            "UPDATE visit_analyses SET handoff_status='complete', lead_record_id=?, handoff_note=NULL WHERE id=?",
+            (handoff["lead_record_id"], review_id),
+        )
+        return RedirectResponse(f"/review/{review_id}?handoff=complete", status_code=303)
 
     @app.post("/review/{review_id}/verify")
     def verify_visit_identity(

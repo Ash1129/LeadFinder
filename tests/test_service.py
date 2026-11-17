@@ -109,7 +109,12 @@ def test_how_it_works_page_and_its_place_in_the_sidebar(app, sdr, manager):
     page = sdr.get("/how")
     assert page.status_code == 200 and '<a class="nav" href="/how" aria-current="page">How it works</a>' in page.text
     text = page.text
-    assert "The path of a lead" in text and "40 practices" in text and "0 emails written" in text and "Write the email" in text
+    assert "Already-identified demo leads" in text and "40 practices" in text and "0 emails written" in text and "Write the email" in text
+    assert "intent gate before practice lookup" in text and "No local practice match or lead score happens before this gate." in text
+    assert "sample visits were not run through the gate above" in text
+    assert '<svg class="workflow-svg"' in text and 'role="img"' in text
+    assert "human_review" in text and "Logistic regression" in text and "ResearchAgent" in text
+    assert "standalone module but is not connected" in text
     assert 'class="kicker"' in text and 'class="fnotes"' in text and "What is real today" in text
     assert 'href="/audit"' not in text.split("<main")[1] and 'href="/audit"' in manager.get("/how").text.split("<main")[1]
     assert sdr.get("/how", follow_redirects=False).status_code == 200 and TestClient(app).get("/how", follow_redirects=False).status_code == 303
@@ -139,6 +144,14 @@ def test_demo_starts_with_labeled_review_examples(app, sdr):
     ).fetchone()["id"]
     detail = sdr.get(f"/review/{review_id}")
     assert "Synthetic demo case" in detail.text and "not collected from a real visitor" in detail.text
+    verified = app.state.conn.execute(
+        "SELECT id, handoff_status, lead_record_id FROM visit_analyses "
+        "WHERE is_demo=1 AND review_status='identity_verified'"
+    ).fetchone()
+    assert verified["handoff_status"] == "complete" and verified["lead_record_id"] is not None
+    resolved = sdr.get(f"/review/{verified['id']}")
+    assert "Local synthetic-record handoff complete" in resolved.text
+    assert "not external web research" in resolved.text
 
 
 def review_payload(request_id="visit-request-1"):
@@ -195,8 +208,18 @@ def test_scrubbed_gate_review_is_persisted_and_resolved_in_the_app(app, sdr):
         "identity_verified", practice_id, "riley", "Matched against approved source"
     )
     resolved_page = sdr.get(f"/review/{review_id}")
-    assert "Research is not started by this resolution" in resolved_page.text
-    assert "/lead/" in resolved_page.text
+    assert "Local synthetic-record handoff complete" in resolved_page.text
+    assert "not external web research" in resolved_page.text
+    handoff = app.state.conn.execute(
+        "SELECT identity_method, lead_record_id, practice_record_json FROM lead_handoffs WHERE request_id=?",
+        (payload["request_id"],),
+    ).fetchone()
+    assert handoff["identity_method"] == "human_review"
+    assert '"external_research_performed":false' in handoff["practice_record_json"]
+    assert f'href="/lead/{handoff["lead_record_id"]}"' in resolved_page.text
+    assert app.state.conn.execute(
+        "SELECT COUNT(*) n FROM visits WHERE source_request_id=?", (payload["request_id"],)
+    ).fetchone()["n"] == 2
 
     repeated = sdr.post("/api/visit-analysis", json=payload).json()
     assert repeated["analysis_id"] == review_id and repeated["persisted"] is True
@@ -204,6 +227,90 @@ def test_scrubbed_gate_review_is_persisted_and_resolved_in_the_app(app, sdr):
     changed = review_payload()
     changed["practice_name_raw"] = "Different Clinic"
     assert sdr.post("/api/visit-analysis", json=changed).status_code == 409
+
+
+def test_automatic_and_human_identity_share_the_local_lead_handoff(app, sdr):
+    conn = app.state.conn
+    practice = conn.execute("SELECT id, name, city, state FROM practices ORDER BY id LIMIT 1").fetchone()
+    practice_id = practice["id"]
+    manual = review_payload("human-handoff")
+    manual_result = sdr.post("/api/visit-analysis", json=manual).json()
+    page = sdr.get(f"/review/{manual_result['analysis_id']}")
+    verified = sdr.post(
+        f"/review/{manual_result['analysis_id']}/verify",
+        data={"practice_id": practice_id, "seen": form_value(page.text, "seen")},
+        follow_redirects=False,
+    )
+    assert verified.status_code == 303
+    human_handoff = conn.execute(
+        "SELECT lead_record_id FROM lead_handoffs WHERE request_id=?", (manual["request_id"],)
+    ).fetchone()
+    human_lead = conn.execute("SELECT score, chance FROM leads WHERE id=?", (human_handoff["lead_record_id"],)).fetchone()
+
+    automatic = review_payload("automatic-handoff")
+    automatic.update({
+        "practice_name_raw": practice["name"],
+        "location_hint": f"{practice['city']}, {practice['state']}",
+        "company_identified": True,
+        "identification_confidence": 0.95,
+    })
+    response = sdr.post("/api/visit-analysis", json=automatic)
+    assert response.status_code == 200
+    result = response.json()
+    assert result["routing_decision"] == "research"
+    assert result["handoff_status"] == "complete"
+    assert result["handoff"]["identity_method"] == "automatic"
+    assert result["handoff"]["practice_record"]["source"] == "synthetic"
+    assert result["handoff"]["practice_record"]["external_research_performed"] is False
+    assert result["handoff"]["lead_record_id"] == human_handoff["lead_record_id"]
+    assert result["handoff"]["score"] == human_lead["score"]
+    assert result["handoff"]["chance"] == human_lead["chance"]
+
+    before = conn.execute(
+        "SELECT COUNT(*) n FROM visits WHERE source_request_id=?", (automatic["request_id"],)
+    ).fetchone()["n"]
+    repeated = sdr.post("/api/visit-analysis", json=automatic).json()
+    after = conn.execute(
+        "SELECT COUNT(*) n FROM visits WHERE source_request_id=?", (automatic["request_id"],)
+    ).fetchone()["n"]
+    assert repeated["analysis_id"] == result["analysis_id"] and before == after == 2
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM lead_handoffs WHERE request_id=?", (automatic["request_id"],)
+    ).fetchone()["n"] == 1
+
+    no_match = review_payload("automatic-no-match")
+    no_match.update({
+        "practice_name_raw": practice["name"],
+        "location_hint": "Different City, ZZ",
+        "company_identified": True,
+        "identification_confidence": 0.95,
+    })
+    unmatched = sdr.post("/api/visit-analysis", json=no_match).json()
+    assert unmatched["routing_decision"] == "research"
+    assert unmatched["handoff_status"] == "local_practice_not_found"
+    assert unmatched["persisted"] is False
+    assert conn.execute(
+        "SELECT COUNT(*) n FROM lead_handoffs WHERE request_id=?", (no_match["request_id"],)
+    ).fetchone()["n"] == 0
+
+    cursor = conn.execute(
+        "INSERT INTO practices(npi, name, specialty, providers, city, state, ehr, contact_name, contact_email, source) "
+        "VALUES(?,?,?,?,?,?,?,?,?,?)",
+        ("12345678901", "New Local Clinic", "Family Medicine", 4, "Cambridge", "MA", None, "", "", "synthetic"),
+    )
+    new_practice_id = cursor.lastrowid
+    new_lead = review_payload("automatic-create-lead")
+    new_lead.update({
+        "practice_name_raw": "New Local Clinic",
+        "location_hint": "Cambridge, MA",
+        "company_identified": True,
+        "identification_confidence": 0.95,
+    })
+    created = sdr.post("/api/visit-analysis", json=new_lead).json()
+    assert created["handoff"]["practice_id"] == new_practice_id
+    assert conn.execute("SELECT practice_id FROM leads WHERE id=?", (created["handoff"]["lead_record_id"],)).fetchone()[
+        "practice_id"
+    ] == new_practice_id
 
 
 def test_unverified_or_unsanitized_visits_cannot_enter_review_queue(app, sdr):

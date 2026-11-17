@@ -35,7 +35,9 @@ CREATE TABLE IF NOT EXISTS visits(
   id INTEGER PRIMARY KEY,
   practice_id INTEGER NOT NULL REFERENCES practices(id),
   page TEXT NOT NULL,
-  at REAL NOT NULL
+  at REAL NOT NULL,
+  source_request_id TEXT,
+  source_view_id TEXT
 );
 CREATE INDEX IF NOT EXISTS visits_practice ON visits(practice_id);
 CREATE TABLE IF NOT EXISTS leads(
@@ -112,9 +114,26 @@ CREATE TABLE IF NOT EXISTS visit_analyses(
   practice_id INTEGER REFERENCES practices(id),
   resolved_by TEXT REFERENCES staff(username),
   resolved_at REAL,
-  resolution_note TEXT
+  resolution_note TEXT,
+  handoff_status TEXT NOT NULL DEFAULT 'not_started',
+  lead_record_id INTEGER REFERENCES leads(id),
+  handoff_note TEXT
 );
 CREATE INDEX IF NOT EXISTS visit_analyses_review ON visit_analyses(routing_decision, review_status, created_at);
+CREATE TABLE IF NOT EXISTS lead_handoffs(
+  id INTEGER PRIMARY KEY,
+  request_id TEXT UNIQUE NOT NULL,
+  visitor_ref TEXT NOT NULL,
+  identity_method TEXT NOT NULL CHECK(identity_method IN ('automatic', 'human_review')),
+  practice_id INTEGER NOT NULL REFERENCES practices(id),
+  lead_record_id INTEGER NOT NULL REFERENCES leads(id),
+  analysis_json TEXT NOT NULL,
+  practice_record_json TEXT NOT NULL,
+  created_by TEXT NOT NULL REFERENCES staff(username),
+  created_at REAL NOT NULL,
+  is_demo INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS lead_handoffs_created ON lead_handoffs(created_at);
 """
 
 
@@ -136,7 +155,10 @@ def connect(path: Path | str = DEFAULT_DB) -> sqlite3.Connection:
 ADDED = {"leads": {"written_by": "TEXT NOT NULL DEFAULT 'template'", "brief": "TEXT", "brief_by": "TEXT",
                    "chance": "REAL", "chance_band": "TEXT", "chance_reasons": "TEXT", "model_version": "TEXT"},
          "audit": {"written_by": "TEXT", "chance": "REAL", "model_version": "TEXT"},
-         "visit_analyses": {"is_demo": "INTEGER NOT NULL DEFAULT 0"}}
+         "visits": {"source_request_id": "TEXT", "source_view_id": "TEXT"},
+         "visit_analyses": {"is_demo": "INTEGER NOT NULL DEFAULT 0",
+                            "handoff_status": "TEXT NOT NULL DEFAULT 'not_started'",
+                            "lead_record_id": "INTEGER REFERENCES leads(id)", "handoff_note": "TEXT"}}
 
 
 def _migrate(conn: sqlite3.Connection) -> None:
@@ -145,6 +167,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         for name, decl in columns.items():
             if name not in have:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS visits_gate_view ON visits(source_request_id, source_view_id)"
+    )
 
 
 def get_setting(conn: sqlite3.Connection, key: str, default: Any = None) -> Any:
