@@ -1,6 +1,6 @@
 {
-  "gate_v1": {
-    "label": "v1 (current)",
+  "gate_v1_baseline": {
+    "label": "taxonomy v1 baseline",
     "by_persona": {
       "administrator": {
         "n": 309,
@@ -33,7 +33,7 @@
         "pass_rate_identified": 1.0
       }
     },
-    "recall_real_leads": 0.9503722084367245,
+    "recall_should_pass": 0.9503722084367245,
     "false_pass_rate_browsers": 0.1574074074074074,
     "confusion": {
       "tp": 766,
@@ -50,8 +50,8 @@
     },
     "passed": 817
   },
-  "gate_v2": {
-    "label": "v1 + taxonomy v2 (proposed)",
+  "gate_v2_current": {
+    "label": "taxonomy v2 current",
     "by_persona": {
       "administrator": {
         "n": 309,
@@ -84,7 +84,7 @@
         "pass_rate_identified": 1.0
       }
     },
-    "recall_real_leads": 0.9540942928039702,
+    "recall_should_pass": 0.9540942928039702,
     "false_pass_rate_browsers": 0.0,
     "confusion": {
       "tp": 769,
@@ -101,97 +101,97 @@
     },
     "passed": 769
   },
-  "taxonomy_v1": 0.855912294440094,
-  "taxonomy_v2": 0.9995525226535407,
+  "taxonomy_v1_baseline": 0.855912294440094,
+  "taxonomy_v2_current": 0.9995525226535407,
   "match_current": {
-    "n": 817,
+    "n": 769,
     "outcomes": {
-      "ambiguous_truth_in_top3": 223,
-      "correct_match": 552,
+      "ambiguous_truth_in_top3": 209,
+      "correct_match": 518,
       "ambiguous_truth_missing": 41,
       "not_found": 1
     },
     "by_noise": {
       "abbreviation": {
         "ambiguous_truth_missing": 20,
-        "correct_match": 80,
-        "ambiguous_truth_in_top3": 27
+        "correct_match": 73,
+        "ambiguous_truth_in_top3": 25
       },
       "case": {
-        "correct_match": 24,
+        "correct_match": 22,
         "ambiguous_truth_in_top3": 9,
         "ambiguous_truth_missing": 1
       },
       "exact": {
-        "correct_match": 259,
-        "ambiguous_truth_in_top3": 95,
+        "correct_match": 240,
+        "ambiguous_truth_in_top3": 90,
         "ambiguous_truth_missing": 12
       },
       "legal_suffix": {
-        "ambiguous_truth_in_top3": 51,
-        "correct_match": 81,
+        "ambiguous_truth_in_top3": 48,
+        "correct_match": 78,
         "not_found": 1,
         "ambiguous_truth_missing": 1
       },
       "no_domain": {
-        "ambiguous_truth_in_top3": 223,
-        "correct_match": 8,
+        "ambiguous_truth_in_top3": 209,
+        "correct_match": 7,
         "ambiguous_truth_missing": 41,
         "not_found": 1
       },
       "typo": {
-        "ambiguous_truth_in_top3": 41,
-        "correct_match": 108,
+        "ambiguous_truth_in_top3": 37,
+        "correct_match": 105,
         "ambiguous_truth_missing": 7
       },
       "with_domain": {
-        "correct_match": 544
+        "correct_match": 511
       }
     }
   },
   "match_proposed": {
-    "n": 817,
+    "n": 769,
     "outcomes": {
-      "ambiguous_truth_in_top3": 139,
-      "correct_match": 636,
+      "ambiguous_truth_in_top3": 128,
+      "correct_match": 599,
       "ambiguous_truth_missing": 41,
       "not_found": 1
     },
     "by_noise": {
       "abbreviation": {
         "ambiguous_truth_missing": 20,
-        "correct_match": 80,
-        "ambiguous_truth_in_top3": 27
+        "correct_match": 73,
+        "ambiguous_truth_in_top3": 25
       },
       "case": {
-        "correct_match": 32,
+        "correct_match": 30,
         "ambiguous_truth_missing": 1,
         "ambiguous_truth_in_top3": 1
       },
       "exact": {
-        "correct_match": 304,
-        "ambiguous_truth_in_top3": 50,
+        "correct_match": 283,
+        "ambiguous_truth_in_top3": 47,
         "ambiguous_truth_missing": 12
       },
       "legal_suffix": {
-        "ambiguous_truth_in_top3": 43,
-        "correct_match": 89,
+        "ambiguous_truth_in_top3": 40,
+        "correct_match": 86,
         "not_found": 1,
         "ambiguous_truth_missing": 1
       },
       "no_domain": {
-        "ambiguous_truth_in_top3": 139,
-        "correct_match": 92,
+        "ambiguous_truth_in_top3": 128,
+        "correct_match": 88,
         "ambiguous_truth_missing": 41,
         "not_found": 1
       },
       "typo": {
-        "ambiguous_truth_in_top3": 18,
-        "correct_match": 131,
+        "ambiguous_truth_in_top3": 15,
+        "correct_match": 127,
         "ambiguous_truth_missing": 7
       },
       "with_domain": {
-        "correct_match": 544
+        "correct_match": 511
       }
     }
   },

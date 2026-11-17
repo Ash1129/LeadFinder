@@ -36,11 +36,13 @@ present these standalone modules as a live end-to-end workflow.
   fields/provenance, matching cutoff, and website-domain quality. The current research match cutoffs are heuristics,
   not calibrated probabilities.
 - **Sasha (@Sasha-Shkolnikov) — visit analysis:** standalone deterministic features and gate are in
-  `src/leadfinder/visit_analysis.py`; the taxonomy, thresholds, and inferred hints are provisional. Review and
-  revise them with Hanna's ground truth, then integrate only after the scrubbed visit-data contract is agreed.
-- **Hanna (@hannamlt) — evaluation:** confirm simulator ownership and separate ground truth; evaluate gate recall,
-  false passes, taxonomy coverage, and match accuracy, then send findings to Sasha/Daniel for revisions. Keep
-  labels out of `ResearchResult` and lead state.
+  `src/leadfinder/visit_analysis.py`; taxonomy v2 now handles content sections before slug keywords, common demo
+  paths, and customer/specialty pages. Validate against representative real-site URLs and keep other thresholds
+  and inferred hints provisional; integrate only after the scrubbed visit-data contract is agreed.
+- **Hanna (@hannamlt) — evaluation:** the persona simulator and separate ground truth are now in
+  `src/leadfinder/evaluation/`. Validate the persona/should-pass labels and the assumed identification rates;
+  report gate recall, false passes, taxonomy coverage, and match accuracy to Sasha/Daniel. Keep labels out of
+  `ResearchResult` and lead state.
 - **Ashwin (@Ash1129) — scoring:** agree on the shared lead-state fields with Sasha, Daniel, and Mahika; decide
   whether/how to consume inferred visit hints and research facts, and how unknown EHR, partial research, and
   ambiguous candidates affect scores and reasons.
@@ -60,10 +62,13 @@ and tests as real data and evaluation decisions arrive. Full questions and rubri
 
 - **Visits and privacy:** `visit_analysis.py` assumes opaque view IDs, one lead/visitor's events, and already
   allowlisted, scrubbed company-level inputs. `patient_data_stripped` is only a caller assertion, not a scrubber.
-  Agree on identity, fields, retention, and upstream scrubbing before connecting real visits.
-- **Gate and inferred hints:** the 30-day lookback, 30-minute session timeout, 0.5 identification cutoff, page
-  taxonomy, criteria, and owner/administrator heuristics are starting values. Hanna's persona evaluation should
-  drive Sasha's revisions; Ashwin should decide whether inferred role/EHR/specialty/product hints belong in scoring.
+  Agree on identity, fields, retention, and upstream scrubbing before connecting real visits. The simulator's
+  identification rates are assumptions, not measured tracking coverage; do not raise them as a substitute for
+  improving the real identity source.
+- **Gate and inferred hints:** taxonomy v2 is implemented based on simulated URLs, but still needs representative
+  real-site validation. The 30-day lookback, 30-minute session timeout, 0.5 identification cutoff, other gate
+  rules, and owner/administrator heuristics remain provisional. Hanna's evaluation should drive Sasha's revisions;
+  Ashwin should decide whether inferred role/EHR/specialty/product hints belong in scoring.
 - **Research and shared state:** `research.py` uses provisional match heuristics (0.85 match, 0.45 ambiguity,
   0.10 margin), a 10-call cap, and homepage-only EHR evidence. Daniel should confirm or replace matching/data
   assumptions; Ashwin and Mahika should agree on the shared state and treatment of partial/ambiguous results.
@@ -123,8 +128,10 @@ next version and put it to the scorecard:
 - Daniel's concrete directory adapter and confirmed data/matching contract for `research.py`; the module cannot look
   up a real practice until that adapter is supplied.
 - Persona-based visit simulation and evaluation now exist (`src/leadfinder/evaluation/`, results in
-  `docs/evaluation-report.md`). The taxonomy and match-margin changes it recommends are not applied to the
-  modules. Not yet covered: the scoring benchmark against this ground truth and the SDR feedback loop.
+  `docs/evaluation-report.md`). Taxonomy v2 is applied in the standalone gate; its simulation results are not
+  evidence of real-traffic performance. The proposed research match-margin change is not applied and needs
+  Daniel's review with real directory data. Not yet covered: the scoring benchmark against this ground truth and
+  the SDR feedback loop.
 - Real outcomes: the model's labels are simulated, and SDR approvals and rejections do not retrain it yet.
 - The LLM-judgment row of the benchmark (Claude ranking the same held-out leads).
 - Integration of the standalone research module into an application workflow; its website fetcher is limited to a

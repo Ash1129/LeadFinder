@@ -6,16 +6,16 @@ All results are on simulated data. They test whether the modules behave as desig
 
 ## Summary
 
-1. **The gate finds real leads** (95.0% recall among identified visitors), **but lets 15.7% of identified browsers through**. Every false pass comes from the page taxonomy, not the thresholds: blog and careers pages whose slug contains a keyword (e.g. `/blog/pricing-your-services`) are classified as pricing or EHR-integration pages (high tier).
-2. **Proposed fix (taxonomy v2)**: browser false passes drop to 0.0% and recall moves to 95.4%; page-category accuracy goes from 85.6% to 100.0%. Recommended change; `visit_analysis.py` is unchanged.
-3. **Identification is the real bottleneck**: 103 of 309 future converters (33.3%) never reach the gate because the tracking tool did not identify their practice. No threshold change recovers them.
-4. **Practice matching never picks the wrong practice** (0 wrong matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never separate two practices with the same name. Lowering the margin to 0.07 raises correct matches from 552 to 636 of 817 with still 0 wrong matches. To be confirmed on real directory data.
+1. **Current gate (taxonomy v2)** passes 95.4% of identified visitors whose persona ground truth says they should pass; 0.0% of identified browsers are also passed. The v1-to-v2 taxonomy change reduced browser false passes and fixed catalog URL errors.
+2. **Taxonomy v2 comparison**: identified-visitor recall moves from 95.0% to 95.4%; browser false passes from 15.7% to 0.0%; page-category accuracy from 85.6% to 100.0%. V2 is implemented; its 100% catalog accuracy is not a real-traffic result.
+3. **Identification is the main modeled bottleneck**: 103 of 309 future converters (33.3%) are blocked as unidentified in this simulation. Identification is sampled from assumed persona rates (browser 40%, researcher 70%, ready_to_buy 80%, administrator 65%, owner 70%); these are not measured tracking-tool results. No threshold change recovers them.
+4. **Practice matching never picks the wrong practice** (0 wrong matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never separate two practices with the same name. Lowering the margin to 0.07 raises correct matches from 518 to 599 of 769 with still 0 wrong matches. To be confirmed on real directory data.
 
 ## 1. Gate: pass rates by persona
 
-`passed (identified)` isolates the threshold rule from identification losses. Browsers should fail; all other personas should pass.
+`passed (identified)` isolates gate behavior from simulated identity losses. The simulator's ground truth labels browsers as should-not-pass and all other personas as should-pass; these are evaluation assumptions.
 
-**Current (v1)**: recall 95.0%, browser false-pass 15.7%, confusion {'tp': 766, 'fn': 40, 'fp': 51, 'tn': 273}
+**Baseline taxonomy v1**: should-pass recall 95.0%, browser false-pass 15.7%, confusion {'tp': 766, 'fn': 40, 'fp': 51, 'tn': 273}
 
 | persona | n | identified | passed (all) | passed (identified) |
 |---|---|---|---|---|
@@ -25,7 +25,7 @@ All results are on simulated data. They test whether the modules behave as desig
 | ready_to_buy | 198 | 83.8% | 83.8% | 100.0% |
 | researcher | 413 | 72.6% | 72.6% | 100.0% |
 
-**Proposed (v1 + taxonomy v2)**: recall 95.4%, browser false-pass 0.0%, confusion {'tp': 769, 'fn': 37, 'fp': 0, 'tn': 324}
+**Current taxonomy v2**: should-pass recall 95.4%, browser false-pass 0.0%, confusion {'tp': 769, 'fn': 37, 'fp': 0, 'tn': 324}
 
 | persona | n | identified | passed (all) | passed (identified) |
 |---|---|---|---|---|
@@ -35,11 +35,11 @@ All results are on simulated data. They test whether the modules behave as desig
 | ready_to_buy | 198 | 83.8% | 83.8% | 100.0% |
 | researcher | 413 | 72.6% | 72.6% | 100.0% |
 
-Where future converters end up (current gate): passed 185, unidentified 103, single_shallow_session 11, only_low_tier_pages 6, low_identification 4.
+Where simulated future converters end up (current v2 gate): passed 185, unidentified 103, single_shallow_session 11, only_low_tier_pages 6, low_identification 4.
 
 ## 2. Page taxonomy coverage
 
-Share of simulated page views put in the intended category: **85.6%** (v1) vs **100.0%** (v2). URLs the current taxonomy gets wrong:
+Share of simulated page views put in the intended category: **85.6%** (v1 baseline) vs **100.0%** (current v2). URLs the v1 baseline misclassified:
 
 | URL | intended | classified as | tier |
 |---|---|---|---|
@@ -52,37 +52,37 @@ Share of simulated page views put in the intended category: **85.6%** (v1) vs **
 | `/webinars/no-show-rates` | blog | unmapped | low |
 | `/careers/billing-specialist` | careers | billing | medium |
 
-Proposed change (`evaluation/gate_eval.py: proposed_classify`): a page inside a content section (blog, news, articles, webinars, resources, careers, jobs) keeps that section's low tier even when its slug contains a keyword; `/request-a-demo`, `/schedule-demo` and similar count as demo; `/customers/<specialty>` counts as a specialty case study.
+Applied change (`visit_analysis.py`): a page inside a content section (blog, news, articles, webinars, resources, careers, jobs) keeps that section's low tier even when its slug contains a keyword; `/request-a-demo`, `/schedule-demo` and similar count as demo; `/customers/<specialty>` counts as a specialty case study.
 
 Caveat: the v2 numbers are optimistic. The fix was written for the URLs in this catalog, so 100% here does not mean 100% on real traffic. What carries over is the rule: classify by site section before keywords.
 
 ## 3. Practice matching (research.py safeguards)
 
-Leads that passed the gate (817). Uses `rank_candidates` and the same match/ambiguity thresholds as `ResearchAgent`, assuming the model picks the top candidate (best case for the agent). Directory lookup is a stand-in for the practice-directory adapter.
+Leads that passed the gate (769). Uses `rank_candidates` and the same match/ambiguity thresholds as `ResearchAgent`, assuming the model picks the top candidate (best case for the agent). Directory lookup is a stand-in for the practice-directory adapter.
 
 **Current (margin 0.1)**
 
 | hint | n | correct_match | WRONG_match | ambiguous_truth_in_top3 | ambiguous_truth_missing | not_found |
 |---|---|---|---|---|---|---|
-| abbreviation | 127 | 63.0% | 0.0% | 21.3% | 15.7% | 0.0% |
-| case | 34 | 70.6% | 0.0% | 26.5% | 2.9% | 0.0% |
-| exact | 366 | 70.8% | 0.0% | 26.0% | 3.3% | 0.0% |
-| legal_suffix | 134 | 60.4% | 0.0% | 38.1% | 0.7% | 0.7% |
-| no_domain | 273 | 2.9% | 0.0% | 81.7% | 15.0% | 0.4% |
-| typo | 156 | 69.2% | 0.0% | 26.3% | 4.5% | 0.0% |
-| with_domain | 544 | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| abbreviation | 118 | 61.9% | 0.0% | 21.2% | 16.9% | 0.0% |
+| case | 32 | 68.8% | 0.0% | 28.1% | 3.1% | 0.0% |
+| exact | 342 | 70.2% | 0.0% | 26.3% | 3.5% | 0.0% |
+| legal_suffix | 128 | 60.9% | 0.0% | 37.5% | 0.8% | 0.8% |
+| no_domain | 258 | 2.7% | 0.0% | 81.0% | 15.9% | 0.4% |
+| typo | 149 | 70.5% | 0.0% | 24.8% | 4.7% | 0.0% |
+| with_domain | 511 | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 **Proposed (margin 0.07)**
 
 | hint | n | correct_match | WRONG_match | ambiguous_truth_in_top3 | ambiguous_truth_missing | not_found |
 |---|---|---|---|---|---|---|
-| abbreviation | 127 | 63.0% | 0.0% | 21.3% | 15.7% | 0.0% |
-| case | 34 | 94.1% | 0.0% | 2.9% | 2.9% | 0.0% |
-| exact | 366 | 83.1% | 0.0% | 13.7% | 3.3% | 0.0% |
-| legal_suffix | 134 | 66.4% | 0.0% | 32.1% | 0.7% | 0.7% |
-| no_domain | 273 | 33.7% | 0.0% | 50.9% | 15.0% | 0.4% |
-| typo | 156 | 84.0% | 0.0% | 11.5% | 4.5% | 0.0% |
-| with_domain | 544 | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| abbreviation | 118 | 61.9% | 0.0% | 21.2% | 16.9% | 0.0% |
+| case | 32 | 93.8% | 0.0% | 3.1% | 3.1% | 0.0% |
+| exact | 342 | 82.7% | 0.0% | 13.7% | 3.5% | 0.0% |
+| legal_suffix | 128 | 67.2% | 0.0% | 31.2% | 0.8% | 0.8% |
+| no_domain | 258 | 34.1% | 0.0% | 49.6% | 15.9% | 0.4% |
+| typo | 149 | 85.2% | 0.0% | 10.1% | 4.7% | 0.0% |
+| with_domain | 511 | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
 Caveat: the synthetic directory reuses about 120 names across 400 practices, so same-name practices are more common than in real NPI data. The direction of the finding holds; the size needs real data.
 
@@ -90,8 +90,8 @@ Caveat: the synthetic directory reuses about 120 names across 400 practices, so 
 
 | Observed | Change | Effect | Status |
 |---|---|---|---|
-| 15.7% of identified browsers passed the gate via keyword blog/careers URLs | Taxonomy v2 (content sections first, demo/customer URL variants) | browser false-pass 0.0%, recall 95.0% → 95.4% | Recommended |
-| Same-name practices never auto-matched without a domain | Match margin 0.1 → 0.07 | correct matches 552 → 636, wrong matches 0 | Recommended |
+| 15.7% of identified browsers passed the v1 gate via keyword blog/careers URLs | Taxonomy v2 (content sections first, demo/customer URL variants) | browser false-pass 0.0%, should-pass recall 95.0% → 95.4% | Implemented; validate on real URLs |
+| Same-name practices never auto-matched without a domain | Match margin 0.1 → 0.07 | correct matches 518 → 599, wrong matches 0 | Recommended |
 
 ## Not covered yet
 

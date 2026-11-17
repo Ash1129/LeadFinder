@@ -1,9 +1,4 @@
-"""Evaluate the visit-analysis gate and page taxonomy against persona ground truth.
-
-Runs the real `visit_analysis.analyze_visits`. A proposed taxonomy change can be evaluated without editing
-visit_analysis.py by passing `classifier=` (see `proposed_classify`), so the before/after comparison is reproducible
-and the change can be adopted separately.
-"""
+"""Compare taxonomy v2 in the real gate with the preserved v1 baseline."""
 from __future__ import annotations
 
 from collections import Counter, defaultdict
@@ -14,36 +9,49 @@ from unittest import mock
 from .. import visit_analysis as va
 from .personas import GroundTruth
 
-LOW_SECTIONS = {"blog": "blog", "news": "blog", "articles": "blog", "webinars": "blog", "resources": "blog",
-                "careers": "careers", "jobs": "careers"}
-DEMO_ALIASES = ("request-a-demo", "schedule-demo", "book-a-demo", "book-demo", "get-a-demo")
-
-_original_classify = va._classify
-
-
-def proposed_classify(page_url: str):
-    """Taxonomy v2 proposal: (1) a page inside a content section (blog, careers, ...) keeps that section's low tier
-    even if its slug contains a keyword like 'pricing' or 'ehr'; (2) common demo URL variants count as demo;
-    (3) /customers/<specialty> counts as a specialty case study."""
+def baseline_v1_classify(page_url: str) -> va._PageClassification:
+    """Preserve the pre-v2 classifier for reproducible before/after evaluation."""
     path = va._safe_path(page_url)
-    first = path.strip("/").split("/")[0]
-    if first in LOW_SECTIONS:
-        category = LOW_SECTIONS[first]
-        return va._PageClassification(category, category, va.LOW_TIER)
-    if first in DEMO_ALIASES:
+    if va._path_has(path, "demo", "request-demo", "demo-request", "trial", "free-trial"):
         return va._PageClassification("demo/trial", "demo_or_trial", va.HIGH_TIER, is_demo=True)
-    if first == "customers":
-        return _original_classify(path.replace("/customers/", "/case-studies/", 1))
-    return _original_classify(page_url)
+    if va._path_has(path, "pricing", "plans", "plans-and-pricing"):
+        return va._PageClassification("pricing", "pricing", va.HIGH_TIER, ("pricing",))
+    if va._path_has(path, "integration", "integrations", "ehr", "integrates-with"):
+        ehr = next((name for name in va.EHR_NAMES if name.casefold().replace(" ", "-") in path), None)
+        return va._PageClassification("EHR integration", "ehr_integration", va.HIGH_TIER, ("integration",),
+                                      ("integrations",), ehr_hint=ehr)
+    if va._path_has(path, "security", "hipaa", "privacy", "data-exit", "data-portability", "data-export"):
+        return va._PageClassification("security", "security", va.MEDIUM_TIER, ("security",))
+    if va._path_has(path, "billing", "revenue-cycle", "revenue-cycle-management"):
+        return va._PageClassification("billing", "billing", va.MEDIUM_TIER, product_lines=("billing",))
+
+    parts = {part for part in path.split("/") if part}
+    specialty = next((value for slug, value in va.SPECIALTY_SLUGS.items() if slug in parts), None)
+    if va._path_has(path, "case-study", "case-studies", "customer-stories") and specialty:
+        return va._PageClassification("specialty case study", "specialty_case_study", va.MEDIUM_TIER,
+                                      specialty_hint=specialty)
+    if va._path_has(path, "features", "workflow", "usability", "booking", "scheduling", "appointments"):
+        product = "scheduling" if va._path_has(path, "booking", "scheduling", "appointments") else "workflow"
+        return va._PageClassification("workflow/features", "usability", va.MEDIUM_TIER, ("usability",), (product,))
+    if va._path_has(path, "blog", "news", "articles"):
+        return va._PageClassification("blog", "blog", va.LOW_TIER)
+    if va._path_has(path, "careers", "jobs", "employment"):
+        return va._PageClassification("careers", "careers", va.LOW_TIER)
+    if va._path_has(path, "about", "company"):
+        return va._PageClassification("about", "about", va.LOW_TIER)
+    if path == "/":
+        return va._PageClassification("/", "homepage", va.LOW_TIER)
+    return va._PageClassification("unmapped", "unmapped", va.LOW_TIER)
 
 
 @contextmanager
-def using_classifier(classifier):
-    if classifier is None:
-        yield
-        return
-    with mock.patch.object(va, "_classify", classifier):
-        yield
+def using_classifier(classifier=None, taxonomy_version: str | None = None):
+    with mock.patch.object(va, "_classify", classifier or va._classify):
+        if taxonomy_version is None:
+            yield
+        else:
+            with mock.patch.object(va, "TAXONOMY_VERSION", taxonomy_version):
+                yield
 
 
 @dataclass
@@ -52,8 +60,14 @@ class GateRun:
     results: dict  # lead_id -> VisitAnalysisResult
 
 
-def run_gate(inputs, config: va.ThresholdConfig = va.ThresholdConfig(), classifier=None, label: str = "") -> GateRun:
-    with using_classifier(classifier):
+def run_gate(
+    inputs,
+    config: va.ThresholdConfig = va.ThresholdConfig(),
+    classifier=None,
+    label: str = "",
+    taxonomy_version: str | None = None,
+) -> GateRun:
+    with using_classifier(classifier, taxonomy_version):
         results = {i.lead_id: va.analyze_visits(i, config) for i in inputs}
     return GateRun(label or config.version, results)
 
@@ -95,7 +109,7 @@ def gate_metrics(run: GateRun, truth: list[GroundTruth]) -> dict:
     return {
         "label": run.label,
         "by_persona": personas,
-        "recall_real_leads": tp / max(tp + fn, 1),
+        "recall_should_pass": tp / max(tp + fn, 1),
         "false_pass_rate_browsers": fp / max(fp + tn, 1),
         "confusion": {"tp": tp, "fn": fn, "fp": fp, "tn": tn},
         "converters_by_outcome": dict(lost.most_common()),
@@ -103,19 +117,18 @@ def gate_metrics(run: GateRun, truth: list[GroundTruth]) -> dict:
     }
 
 
-def taxonomy_coverage(run: GateRun, extras: dict, classifier=None) -> dict:
+def taxonomy_coverage(run: GateRun, extras: dict) -> dict:
     """Share of simulated page views whose category matches the intended one, plus the misclassified URLs."""
     total = correct = 0
     wrong = Counter()
-    with using_classifier(classifier):
-        for lead_id, result in run.results.items():
-            intended = extras[lead_id]["intended_categories"]
-            for page, want in zip(result.pages_viewed, intended):
-                total += 1
-                if page.category == want:
-                    correct += 1
-                else:
-                    wrong[(want, page.category)] += 1
+    for lead_id, result in run.results.items():
+        intended = extras[lead_id]["intended_categories"]
+        for page, want in zip(result.pages_viewed, intended):
+            total += 1
+            if page.category == want:
+                correct += 1
+            else:
+                wrong[(want, page.category)] += 1
     # Map wrong pairs back to example URLs for the report.
     return {"page_views": total, "accuracy": correct / max(total, 1), "errors": wrong.most_common()}
 
@@ -124,7 +137,7 @@ def misclassified_urls(classifier=None) -> list[tuple[str, str, str, str]]:
     """Every catalog URL whose category differs from the intended one: (url, intended, got, tier)."""
     from .personas import URLS
     out = []
-    fn = classifier or _original_classify
+    fn = classifier or va._classify
     for group in URLS.values():
         for url, want in group:
             got = fn(url)

@@ -1,4 +1,4 @@
-"""Deterministic visit features and the recall-oriented, pre-research lead gate."""
+"""Versioned deterministic visit features and the recall-oriented, pre-research lead gate."""
 from __future__ import annotations
 
 import math
@@ -9,7 +9,8 @@ from urllib.parse import unquote, urlsplit
 
 from .outreach import KNOWN_EHRS
 
-SCHEMA_VERSION = "visit-v1"
+SCHEMA_VERSION = "visit-v2"
+TAXONOMY_VERSION = "v2"
 Tier = Literal["high", "medium", "low"]
 HIGH_TIER: Tier = "high"
 MEDIUM_TIER: Tier = "medium"
@@ -19,6 +20,16 @@ PAGE_CATEGORIES = (
     "demo_or_trial", "pricing", "ehr_integration", "security", "billing", "specialty_case_study", "usability",
     "blog", "careers", "about", "homepage", "unmapped",
 )
+CONTENT_SECTIONS = {
+    "blog": "blog",
+    "news": "blog",
+    "articles": "blog",
+    "webinars": "blog",
+    "resources": "blog",
+    "careers": "careers",
+    "jobs": "careers",
+}
+DEMO_ALIASES = ("request-a-demo", "schedule-demo", "book-a-demo", "book-demo", "get-a-demo")
 
 SPECIALTIES = (
     "Family Medicine", "Pediatrics", "Dermatology", "Internal Medicine", "Orthopedic Surgery",
@@ -121,6 +132,7 @@ class PageFeature:
 class VisitAnalysisResult:
     lead_id: str
     schema_version: str
+    taxonomy_version: str
     threshold_config_version: str
     window_start: float
     window_end: float
@@ -198,6 +210,18 @@ def _path_has(path: str, *terms: str) -> bool:
 
 def _classify(page_url: str) -> _PageClassification:
     path = _safe_path(page_url)
+    segments = [part for part in path.strip("/").split("/") if part]
+    first_segment = segments[0] if segments else ""
+    if first_segment in CONTENT_SECTIONS:
+        category = CONTENT_SECTIONS[first_segment]
+        return _PageClassification(category, category, LOW_TIER)
+    if first_segment in DEMO_ALIASES:
+        return _PageClassification("demo/trial", "demo_or_trial", HIGH_TIER, is_demo=True)
+    if first_segment == "customers" and len(segments) > 1:
+        specialty = SPECIALTY_SLUGS.get(segments[1])
+        if specialty:
+            return _PageClassification("specialty case study", "specialty_case_study", MEDIUM_TIER,
+                                       specialty_hint=specialty)
     if _path_has(path, "demo", "request-demo", "demo-request", "trial", "free-trial"):
         return _PageClassification("demo/trial", "demo_or_trial", HIGH_TIER, is_demo=True)
     if _path_has(path, "pricing", "plans", "plans-and-pricing"):
@@ -371,6 +395,7 @@ def analyze_visits(
     return VisitAnalysisResult(
         lead_id=data.lead_id,
         schema_version=SCHEMA_VERSION,
+        taxonomy_version=TAXONOMY_VERSION,
         threshold_config_version=config.version,
         window_start=window_start,
         window_end=data.window_end,

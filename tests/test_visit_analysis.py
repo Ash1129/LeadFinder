@@ -190,7 +190,8 @@ def test_schema_and_threshold_versions_are_exposed_as_json():
     )
     serialized = result.as_dict()
 
-    assert serialized["schema_version"] == "visit-v1"
+    assert serialized["schema_version"] == "visit-v2"
+    assert serialized["taxonomy_version"] == "v2"
     assert serialized["threshold_config_version"] == "v2"
     assert serialized["pages_viewed"][0]["session_id"] == "lead-1:s1"
     assert serialized["threshold_reasons"] == ["high_tier_page"]

@@ -12,7 +12,7 @@ from unittest import mock
 
 from .. import research as rs
 from . import gate_eval, match_eval
-from .personas import GT_VERSION, PERSONA_MIX, simulate, truth_rows
+from .personas import BEHAVIOR, GT_VERSION, PERSONA_MIX, simulate, truth_rows
 
 PROPOSED_MATCH_MARGIN = 0.07
 
@@ -40,21 +40,30 @@ def _match_table(mm: dict) -> list[str]:
 
 def build_report(n: int, seed: int) -> tuple[str, dict]:
     practices, inputs, truth, extras = simulate(n, seed)
-    v1 = gate_eval.run_gate(inputs, label="v1 (current)")
-    v2 = gate_eval.run_gate(inputs, classifier=gate_eval.proposed_classify, label="v1 + taxonomy v2 (proposed)")
+    v1 = gate_eval.run_gate(
+        inputs,
+        classifier=gate_eval.baseline_v1_classify,
+        label="taxonomy v1 baseline",
+        taxonomy_version="v1",
+    )
+    v2 = gate_eval.run_gate(inputs, label="taxonomy v2 current")
     m1, m2 = gate_eval.gate_metrics(v1, truth), gate_eval.gate_metrics(v2, truth)
     t1 = gate_eval.taxonomy_coverage(v1, extras)
-    t2 = gate_eval.taxonomy_coverage(v2, extras, gate_eval.proposed_classify)
-    bad_urls = gate_eval.misclassified_urls()
+    t2 = gate_eval.taxonomy_coverage(v2, extras)
+    bad_urls = gate_eval.misclassified_urls(gate_eval.baseline_v1_classify)
 
-    passed = {k for k, r in v1.results.items() if r.passes_threshold}
+    passed = {k for k, r in v2.results.items() if r.passes_threshold}
     mm1 = match_eval.match_metrics(inputs, truth, practices, extras, only_ids=passed)
     with mock.patch.object(rs, "MATCH_MARGIN", PROPOSED_MATCH_MARGIN):
         mm2 = match_eval.match_metrics(inputs, truth, practices, extras, only_ids=passed)
 
     converters = sum(t.converted for t in truth)
-    lost_unidentified = m1["converters_by_outcome"].get("unidentified", 0)
+    lost_unidentified = m2["converters_by_outcome"].get("unidentified", 0)
     mix = ", ".join(f"{k} {int(v * 100)}%" for k, v in PERSONA_MIX.items())
+    identification_rates = ", ".join(
+        f"{persona} {int(behavior['p_identified'] * 100)}%"
+        for persona, behavior in BEHAVIOR.items()
+    )
 
     L = [
         "# Evaluation report: visit gate, page taxonomy and practice matching",
@@ -67,16 +76,17 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         "",
         "## Summary",
         "",
-        f"1. **The gate finds real leads** ({_pct(m1['recall_real_leads'])} recall among identified visitors), "
-        f"**but lets {_pct(m1['false_pass_rate_browsers'])} of identified browsers through**. Every false pass comes "
-        "from the page taxonomy, not the thresholds: blog and careers pages whose slug contains a keyword "
-        "(e.g. `/blog/pricing-your-services`) are classified as pricing or EHR-integration pages (high tier).",
-        f"2. **Proposed fix (taxonomy v2)**: browser false passes drop to {_pct(m2['false_pass_rate_browsers'])} and "
-        f"recall moves to {_pct(m2['recall_real_leads'])}; page-category accuracy goes from {_pct(t1['accuracy'])} "
-        f"to {_pct(t2['accuracy'])}. Recommended change; `visit_analysis.py` is unchanged.",
-        f"3. **Identification is the real bottleneck**: {lost_unidentified} of {converters} future converters "
-        f"({_pct(lost_unidentified / max(converters, 1))}) never reach the gate because the tracking tool did not "
-        "identify their practice. No threshold change recovers them.",
+        f"1. **Current gate (taxonomy v2)** passes {_pct(m2['recall_should_pass'])} of identified visitors whose "
+        f"persona ground truth says they should pass; {_pct(m2['false_pass_rate_browsers'])} of identified browsers "
+        "are also passed. The v1-to-v2 taxonomy change reduced browser false passes and fixed catalog URL errors.",
+        f"2. **Taxonomy v2 comparison**: identified-visitor recall moves from {_pct(m1['recall_should_pass'])} to "
+        f"{_pct(m2['recall_should_pass'])}; browser false passes from {_pct(m1['false_pass_rate_browsers'])} to "
+        f"{_pct(m2['false_pass_rate_browsers'])}; page-category accuracy from {_pct(t1['accuracy'])} to "
+        f"{_pct(t2['accuracy'])}. V2 is implemented; its 100% catalog accuracy is not a real-traffic result.",
+        f"3. **Identification is the main modeled bottleneck**: {lost_unidentified} of {converters} future converters "
+        f"({_pct(lost_unidentified / max(converters, 1))}) are blocked as unidentified in this simulation. "
+        f"Identification is sampled from assumed persona rates ({identification_rates}); these are not measured "
+        "tracking-tool results. No threshold change recovers them.",
         f"4. **Practice matching never picks the wrong practice** ({mm1['outcomes'].get('WRONG_match', 0)} wrong "
         "matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the "
         "location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never "
@@ -86,32 +96,32 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         "",
         "## 1. Gate: pass rates by persona",
         "",
-        "`passed (identified)` isolates the threshold rule from identification losses. Browsers should fail; "
-        "all other personas should pass.",
+        "`passed (identified)` isolates gate behavior from simulated identity losses. The simulator's ground truth "
+        "labels browsers as should-not-pass and all other personas as should-pass; these are evaluation assumptions.",
         "",
-        f"**Current (v1)**: recall {_pct(m1['recall_real_leads'])}, browser false-pass "
+        f"**Baseline taxonomy v1**: should-pass recall {_pct(m1['recall_should_pass'])}, browser false-pass "
         f"{_pct(m1['false_pass_rate_browsers'])}, confusion {m1['confusion']}",
         "",
         *_persona_table(m1),
         "",
-        f"**Proposed (v1 + taxonomy v2)**: recall {_pct(m2['recall_real_leads'])}, browser false-pass "
+        f"**Current taxonomy v2**: should-pass recall {_pct(m2['recall_should_pass'])}, browser false-pass "
         f"{_pct(m2['false_pass_rate_browsers'])}, confusion {m2['confusion']}",
         "",
         *_persona_table(m2),
         "",
-        "Where future converters end up (current gate): "
+        "Where simulated future converters end up (current v2 gate): "
         + ", ".join(f"{k} {v}" for k, v in m1["converters_by_outcome"].items()) + ".",
         "",
         "## 2. Page taxonomy coverage",
         "",
-        f"Share of simulated page views put in the intended category: **{_pct(t1['accuracy'])}** (v1) vs "
-        f"**{_pct(t2['accuracy'])}** (v2). URLs the current taxonomy gets wrong:",
+        f"Share of simulated page views put in the intended category: **{_pct(t1['accuracy'])}** (v1 baseline) vs "
+        f"**{_pct(t2['accuracy'])}** (current v2). URLs the v1 baseline misclassified:",
         "",
         "| URL | intended | classified as | tier |",
         "|---|---|---|---|",
         *[f"| `{u}` | {want} | {got} | {tier} |" for u, want, got, tier in bad_urls],
         "",
-        "Proposed change (`evaluation/gate_eval.py: proposed_classify`): a page inside a content section (blog, news, "
+        "Applied change (`visit_analysis.py`): a page inside a content section (blog, news, "
         "articles, webinars, resources, careers, jobs) keeps that section's low tier even when its slug contains a "
         "keyword; `/request-a-demo`, `/schedule-demo` and similar count as demo; `/customers/<specialty>` counts as "
         "a specialty case study.",
@@ -140,10 +150,10 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         "",
         "| Observed | Change | Effect | Status |",
         "|---|---|---|---|",
-        f"| {_pct(m1['false_pass_rate_browsers'])} of identified browsers passed the gate via keyword blog/careers URLs "
+        f"| {_pct(m1['false_pass_rate_browsers'])} of identified browsers passed the v1 gate via keyword blog/careers URLs "
         f"| Taxonomy v2 (content sections first, demo/customer URL variants) | browser false-pass "
-        f"{_pct(m2['false_pass_rate_browsers'])}, recall {_pct(m1['recall_real_leads'])} → "
-        f"{_pct(m2['recall_real_leads'])} | Recommended |",
+        f"{_pct(m2['false_pass_rate_browsers'])}, should-pass recall {_pct(m1['recall_should_pass'])} → "
+        f"{_pct(m2['recall_should_pass'])} | Implemented; validate on real URLs |",
         f"| Same-name practices never auto-matched without a domain | Match margin {rs.MATCH_MARGIN} → "
         f"{PROPOSED_MATCH_MARGIN} | correct matches {mm1['outcomes'].get('correct_match', 0)} → "
         f"{mm2['outcomes'].get('correct_match', 0)}, wrong matches {mm2['outcomes'].get('WRONG_match', 0)} "
@@ -155,7 +165,8 @@ def build_report(n: int, seed: int) -> tuple[str, dict]:
         "- SDR feedback loop: turning logged approvals and rejections into a versioned scoring update.",
         "- Patient-data injection test, once an ingestion scrubber exists.",
     ]
-    data = {"gate_v1": m1, "gate_v2": m2, "taxonomy_v1": t1["accuracy"], "taxonomy_v2": t2["accuracy"],
+    data = {"gate_v1_baseline": m1, "gate_v2_current": m2, "taxonomy_v1_baseline": t1["accuracy"],
+            "taxonomy_v2_current": t2["accuracy"],
             "match_current": mm1, "match_proposed": mm2, "ground_truth_sample": truth_rows(truth[:5])}
     return "\n".join(L) + "\n", data
 
