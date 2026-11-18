@@ -32,6 +32,8 @@
 .workflow-svg .wf-human rect{stroke:var(--ink)}
 .workflow-svg .wf-planned rect{fill:var(--bg);stroke:var(--muted);stroke-dasharray:7 5}
 .workflow-svg .wf-planned .wf-sub{font-style:italic}
+.workflow-svg .wf-planned-edge{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:7 5;marker-end:url(#wf-target-arrow)}
+.workflow-svg .wf-planned-loop{fill:none;stroke:var(--muted);stroke-width:2;stroke-dasharray:7 5;marker-start:url(#wf-target-arrow);marker-end:url(#wf-target-arrow)}
 .wf-caption{margin-top:8px;color:var(--muted);font-size:14px;line-height:20px;max-width:900px}
 @media (max-width:640px){.hw-facts{grid-template-columns:1fr}.hw-facts dd{border-top:0;padding-top:0}.hw-path>li{grid-template-columns:32px minmax(0,1fr)}.hw-path .num{grid-column:2}}
 {% endblock %}
@@ -45,9 +47,10 @@
 <hr class="rule">
 
 <section class="hw-sec" aria-labelledby="workflow-graph-title">
-  <h2 id="workflow-graph-title" class="kicker">Workflow graph · active nodes, agents, and the planned research node</h2>
+  <h2 id="workflow-graph-title" class="kicker">Workflow graph · what runs today and what the target research flow looks like</h2>
   <div class="scroll">
     <figure class="workflow-figure">
+      <h3 class="kicker">Current app workflow · solid arrows</h3>
       <svg class="workflow-svg" viewBox="0 0 1000 1010" role="img" aria-labelledby="workflow-title workflow-desc">
         <title id="workflow-title">LeadFinder workflow from visit intent to human email decision</title>
         <desc id="workflow-desc">Submitted visits first pass through a deterministic intent gate. Low intent or unsanitized visits stop. Qualified uncertain visits go to human identity review; qualified identified visits go to exact local practice matching. Both verified routes and the already-identified synthetic demo records feed the same local visit handoff, then parallel model and points scoring, optional writing, checks, and SDR decision. A separate ResearchAgent is not connected to this running workflow.</desc>
@@ -145,7 +148,91 @@
           <text class="wf-sub" x="500" y="975" text-anchor="middle">logged; nothing is sent</text>
         </g>
       </svg>
-      <figcaption class="wf-caption">Solid arrows are active in the demo. Dashed node: the bounded ResearchAgent exists as a standalone module but is not connected to this application workflow. Seeded synthetic leads start with identity already linked and bypass the visit gate.</figcaption>
+      <figcaption class="wf-caption">This is the path implemented in the app. The ResearchAgent is not part of this current path. Seeded synthetic leads start with identity already linked and bypass the visit gate.</figcaption>
+    </figure>
+  </div>
+  <h3 class="kicker">Target post-gate research workflow · dashed arrows are planned</h3>
+  <p>The standalone ResearchAgent supplies the research logic. The LangGraph prototype from PR #2 is now on master and calls research plus the points scorer, but it is not connected to this FastAPI/SQLite app. The NPI adapter remains proposed in PR #3. This is the target design—not a running app path.</p>
+  <div class="scroll">
+    <figure class="workflow-figure">
+      <svg class="workflow-svg" viewBox="0 0 1200 800" role="img" aria-labelledby="target-workflow-title target-workflow-desc">
+        <title id="target-workflow-title">Planned LeadFinder research workflow after the intent gate</title>
+        <desc id="target-workflow-desc">A qualified identified visit leaves the existing intent gate and enters a planned parallel workflow: an intent summary and ResearchAgent. The agent calls the bounded PracticeDirectory data adapter proposed in PR #3, receives candidate records, ranks them with deterministic match safeguards, and may inspect a returned candidate's HTTPS homepage for EHR evidence. It returns a sourced research result. The intent summary and research result are cross-checked before target parallel ML/rules and planned LLM scoring, then human-reviewed outreach. The LangGraph prototype from merged PR #2 calls the ResearchAgent and points scorer but is not connected to FastAPI/SQLite.</desc>
+        <defs>
+          <marker id="wf-target-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+            <path d="M0,0 L0,6 L8,3 z" fill="var(--muted)"></path>
+          </marker>
+        </defs>
+        <path class="wf-planned-edge" d="M600 90 V125 H260 V155"></path>
+        <path class="wf-planned-edge" d="M600 90 V125 H930 V155"></path>
+        <path class="wf-planned-edge" d="M930 235 V310"></path>
+        <path class="wf-planned-edge" d="M800 355 H740"></path>
+        <path class="wf-planned-edge" d="M610 310 V270 H760 V195 H800"></path>
+        <path class="wf-planned-edge" d="M1060 195 H1110 V507 H1060"></path>
+        <path class="wf-planned-edge" d="M610 405 V460"></path>
+        <path class="wf-planned-edge" d="M800 507 H740"></path>
+        <path class="wf-planned-edge" d="M390 195 H435 V610 H480"></path>
+        <path class="wf-planned-edge" d="M610 555 V610"></path>
+        <path class="wf-planned-edge" d="M740 650 H820"></path>
+        <path class="wf-planned-edge" d="M940 690 V710"></path>
+
+        <g class="wf-node wf-code">
+          <rect x="480" y="20" width="240" height="70"></rect>
+          <text class="wf-title" x="600" y="49" text-anchor="middle">Intent gate · research route</text>
+          <text class="wf-sub" x="600" y="73" text-anchor="middle">qualified behavior + sufficient identity</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="130" y="155" width="260" height="80"></rect>
+          <text class="wf-title" x="260" y="186" text-anchor="middle">Intent summary</text>
+          <text class="wf-sub" x="260" y="212" text-anchor="middle">planned one-call summary</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="800" y="155" width="260" height="80"></rect>
+          <text class="wf-title" x="930" y="186" text-anchor="middle">ResearchAgent</text>
+          <text class="wf-sub" x="930" y="212" text-anchor="middle">tool loop · max 10 calls</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="800" y="310" width="260" height="90"></rect>
+          <text class="wf-title" x="930" y="343" text-anchor="middle">Data agent / PracticeDirectory</text>
+          <text class="wf-sub" x="930" y="369" text-anchor="middle">NPI adapter proposed in PR #3</text>
+          <text class="wf-sub" x="930" y="389" text-anchor="middle">stable NPI IDs; no domains / EHRs</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="480" y="310" width="260" height="95"></rect>
+          <text class="wf-title" x="610" y="343" text-anchor="middle">Candidates + code ranking</text>
+          <text class="wf-sub" x="610" y="369" text-anchor="middle">stable IDs + sourced profile facts</text>
+          <text class="wf-sub" x="610" y="390" text-anchor="middle">name/domain/location safeguards</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="480" y="460" width="260" height="95"></rect>
+          <text class="wf-title" x="610" y="493" text-anchor="middle">Sourced ResearchResult</text>
+          <text class="wf-sub" x="610" y="519" text-anchor="middle">candidate, facts, confidence, warnings</text>
+          <text class="wf-sub" x="610" y="540" text-anchor="middle">ambiguous / partial / failed stay explicit</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="800" y="460" width="260" height="95"></rect>
+          <text class="wf-title" x="930" y="493" text-anchor="middle">Optional homepage check</text>
+          <text class="wf-sub" x="930" y="519" text-anchor="middle">one returned candidate's HTTPS site</text>
+          <text class="wf-sub" x="930" y="540" text-anchor="middle">extract recognized EHR mentions only</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="480" y="610" width="260" height="80"></rect>
+          <text class="wf-title" x="610" y="641" text-anchor="middle">Shared state + cross-check</text>
+          <text class="wf-sub" x="610" y="667" text-anchor="middle">compare sourced facts with visit hints</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="820" y="610" width="240" height="80"></rect>
+          <text class="wf-title" x="940" y="641" text-anchor="middle">Parallel scoring + reasons</text>
+          <text class="wf-sub" x="940" y="667" text-anchor="middle">ML/rules + planned LLM scorer</text>
+        </g>
+        <g class="wf-node wf-planned">
+          <rect x="820" y="710" width="240" height="70"></rect>
+          <text class="wf-title" x="940" y="740" text-anchor="middle">Checked outreach + SDR</text>
+          <text class="wf-sub" x="940" y="764" text-anchor="middle">human approval; sending remains off</text>
+        </g>
+        <text class="wf-sub" x="685" y="263" text-anchor="middle">ranked candidates returned to agent</text>
+      </svg>
+      <figcaption class="wf-caption">Dashed workflow is the target architecture. “Data agent” means a bounded directory lookup adapter, not a separate autonomous LLM. PR #3 proposes an NPI table adapter with stable NPI-based IDs but no domain or EHR fields; homepage inspection therefore needs a separately supplied, validated domain. The ResearchAgent requests candidate records, code ranks and safeguards them, and the model may try another supported lookup or inspect a returned candidate's homepage for EHR evidence. The LangGraph prototype from merged PR #2 calls research and a points scorer, but is not wired into this app; parallel LLM scoring and end-to-end integration remain open.</figcaption>
     </figure>
   </div>
 </section>

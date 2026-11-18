@@ -31,15 +31,28 @@ against practices already in the app. A human-verified case and an automatically
 exact local name match (narrowed by location when supplied) share a handoff: derived visit categories are attached
 to the local practice and
 its existing lead is created or rescored. This is synthetic local-record lookup and scoring, not external research.
-The bounded
-prospect-research module in `src/leadfinder/research.py` has no real practice-directory adapter and is not wired
-into the app or LangGraph. Do not present this as a live visitor-tracking-to-research workflow.
+The bounded prospect-research module in `src/leadfinder/research.py` has no real practice-directory adapter on
+`master`. A LangGraph orchestration prototype in `src/leadfinder/orchestration.py` calls the ResearchAgent and
+points scorer, but it is not connected to FastAPI/SQLite. Do not present this as a live
+visitor-tracking-to-research workflow.
+
+The target post-gate flow is: the ResearchAgent sends name/domain/location lookup requests to a bounded
+`PracticeDirectory` adapter, receives candidate records, applies code-based match safeguards, and may inspect a
+returned candidate's HTTPS homepage for recognized EHR evidence. It returns a sourced research result for a later
+cross-check and scoring step. The adapter is a data lookup tool, not a second autonomous LLM agent. This flow is
+not wired into the running app on `master`: the NPI-table/adapter work remains proposed in
+[PR #3](https://github.com/Ash1129/LeadFinder/pull/3), while the orchestration prototype from
+[PR #2](https://github.com/Ash1129/LeadFinder/pull/2) is now on `master` but is not connected to FastAPI/SQLite.
+That prototype uses a points scorer; parallel LLM scoring and full app input/output and failure contracts remain
+open. The NPI table provides stable `npi:<digits>` practice IDs but has no domain or EHR data; a website check
+therefore needs a separately supplied, validated domain.
 
 ### Owner handoff
 
-- **Daniel (@Dami047) — data:** implement the `PracticeDirectory` adapter in `research.py`; confirm stable IDs,
-  fields/provenance, matching cutoff, and website-domain quality. The current research match cutoffs are heuristics,
-  not calibrated probabilities.
+- **Daniel (@Dami047) — data:** the bounded `PracticeDirectory` lookup adapter and NPI snapshot are proposed in
+  PR #3 (the selected lookup-tool approach, not a separate autonomous LLM agent); review its source, stable-ID
+  contract, fields/provenance, provider-count estimate, and matching/domain assumptions before integrating. The
+  current research match cutoffs are heuristics, not calibrated probabilities.
 - **Sasha (@Sasha-Shkolnikov) — visit analysis:** deterministic features and gate are in
   `src/leadfinder/visit_analysis.py`; taxonomy v2 handles content sections before slug keywords, common demo
   paths, and customer/specialty pages. The authenticated app endpoint runs the gate, stores scrubbed review cases, and
@@ -55,13 +68,14 @@ into the app or LangGraph. Do not present this as a live visitor-tracking-to-res
   ambiguous candidates affect scores and reasons.
 - **Gabriel (@gabrielmaurad) — outreach:** use sourced research facts; confirm draft checks/revisions and approval
   feedback. Sending stays disabled until its owner and provider are agreed.
-- **Mahika (@ma2255-cu) — orchestration:** wire the gate, persisted review outcome, and `ResearchAgent` into
-  LangGraph; define checkpointing, traces, retries, and routing for `human_review`, `partial`, and `failed`
+- **Mahika (@ma2255-cu) — orchestration:** integrate the LangGraph prototype with FastAPI/SQLite and persisted
+  review outcomes; confirm checkpointing, traces, retries, and routing for `human_review`, `partial`, and `failed`
   outcomes after owners confirm the input/output contracts. Do not send unresolved identities to research or
   duplicate the research loop.
 
-**Dependency order:** confirm privacy and shared schemas -> provide the real directory adapter and revise the
-standalone gate from evaluation evidence -> wire the graph -> connect scoring/outreach -> evaluate and document
+**Dependency order:** confirm privacy and shared schemas -> review/merge and integrate the proposed directory
+adapter, and revise the standalone gate from evaluation evidence -> connect the graph to the app and persisted
+review outcomes -> connect scoring/outreach -> evaluate and document
 results. These modules are deliberately not frozen contracts; the named owners should update their assumptions
 and tests as real data and evaluation decisions arrive. Full questions and rubric evidence are in
 [docs/architecture-and-rubric.md](./docs/architecture-and-rubric.md).
@@ -141,6 +155,7 @@ next version and put it to the scorecard:
 | `src/leadfinder/writer.py` | who writes the email and the call brief: Claude through the Anthropic SDK, or the templates |
 | `src/leadfinder/seed.py` | synthetic practices with valid-format NPIs, and their visits |
 | `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
+| `src/leadfinder/orchestration.py` | fixed LangGraph workflow prototype that runs the gate, research, points scoring, checked drafting, and approval routing |
 | `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate |
 | `src/leadfinder/service/app.py` | authenticated visit-analysis API and human-review queue integration |
 | `src/leadfinder/service/templates/review_queue.html` and `visit_review.html` | pending review queue and reviewer decision pages |
@@ -151,13 +166,12 @@ next version and put it to the scorecard:
 
 ## Not built yet (from the proposal)
 
-- The brainstorm's LangGraph pipeline: integration of visit features and recall-oriented gate,
-  post-gate intent summary and orchestration of prospect research, cross-check, parallel scorers, checked/revised
-  outreach, and saved human approval. The research and visit-analysis modules exist standalone, but the existing
-  app is not an agent orchestrator.
+- Integration of the LangGraph prototype with FastAPI/SQLite and persisted human-review outcomes. The current
+  graph runs the gate, ResearchAgent, points scorer, checked drafting, and approval routing; the app still does
+  not invoke it. Parallel ML/LLM scoring and the post-gate intent summary remain planned.
 - Enrichment from the real NPPES registry instead of `seed.py`.
-- Daniel's concrete directory adapter and confirmed data/matching contract for `research.py`; the module cannot look
-  up a real practice until that adapter is supplied.
+- The concrete NPI table/`PracticeDirectory` adapter is proposed in PR #3 but is not on `master`; the research
+  module cannot use it in the running app until the PR is reviewed, merged, and wired in.
 - Persona-based visit simulation and evaluation now exist (`src/leadfinder/evaluation/`, results in
   `docs/evaluation-report.md`). Taxonomy v2 is applied in the standalone gate; its simulation results are not
   evidence of real-traffic performance. The proposed research match-margin change is not applied and needs

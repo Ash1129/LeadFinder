@@ -113,8 +113,14 @@ def test_how_it_works_page_and_its_place_in_the_sidebar(app, sdr, manager):
     assert "intent gate before practice lookup" in text and "No local practice match or lead score happens before this gate." in text
     assert "sample visits were not run through the gate above" in text
     assert '<svg class="workflow-svg"' in text and 'role="img"' in text
+    assert "Current app workflow" in text and "Target post-gate research workflow" in text
     assert "human_review" in text and "Logistic regression" in text and "ResearchAgent" in text
-    assert "standalone module but is not connected" in text
+    assert "Data agent / PracticeDirectory" in text and "NPI adapter proposed in PR #3" in text
+    assert "stable NPI IDs; no domains / EHRs" in text
+    assert "Parallel scoring + reasons" in text and "planned LLM scorer" in text
+    assert "LangGraph prototype from PR #2 is now on master" in text
+    assert "LangGraph prototype from merged PR #2" in text
+    assert "not part of this current path" in text
     assert 'class="kicker"' in text and 'class="fnotes"' in text and "What is real today" in text
     assert 'href="/audit"' not in text.split("<main")[1] and 'href="/audit"' in manager.get("/how").text.split("<main")[1]
     assert sdr.get("/how", follow_redirects=False).status_code == 200 and TestClient(app).get("/how", follow_redirects=False).status_code == 303

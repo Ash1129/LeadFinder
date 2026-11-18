@@ -16,7 +16,8 @@ target design must not be described as functionality that already runs.
   identified visit uses that same routine only after a unique exact local name/location match. This handoff uses
   the synthetic local table and scoring logic, not external research. The app does not scrub input. The bounded
   research module defines the agent
-  loop, match safeguards, source-tagged result and website EHR extraction, but has no real directory adapter.
+  loop, match safeguards, source-tagged result and website EHR extraction. A LangGraph prototype invokes it, but
+  neither that workflow nor a real NPI adapter is part of the current FastAPI/SQLite app.
 - **Scoring:** a hand-set points table and an explainable logistic-regression scorer rank all seeded practices.
   Their benchmark, including a gradient-boosted challenger, uses synthetic outcomes and held-out synthetic leads;
   it does not establish real-world conversion performance. There is no LLM scorer benchmark.
@@ -46,11 +47,17 @@ The brainstorm's decisions and their current implementation status:
     versioned gate before costly research. `src/leadfinder/visit_analysis.py` implements the deterministic feature
     and gate logic, including taxonomy v2. A persona simulator evaluates it against synthetic assumptions. The
     authenticated app endpoint and review queue integrate the gate, but ingestion-time scrubbing, real identity
-    resolution, real-traffic validation, and LangGraph integration remain open.
+    resolution, real-traffic validation, and integration of the LangGraph prototype with the app remain open.
 3. After the gate, run a one-call intent summary in parallel with a bounded ReAct prospect-research loop
-   (maximum 10 tool calls). The standalone loop is now implemented in `src/leadfinder/research.py`; connecting
-   Daniel's practice table and wiring it into the graph remain. Unknown EHR is explicit, never guessed. Ambiguous
-   matches retain candidates and confidence rather than inventing a match.
+   (maximum 10 tool calls). The standalone loop is implemented in `src/leadfinder/research.py`: it requests
+   candidates from a `PracticeDirectory` adapter, ranks them with deterministic safeguards, may inspect a returned
+   candidate's HTTPS homepage for recognized EHR evidence, and returns sourced facts with explicit match status.
+   The planned data agent is this bounded directory adapter, not a second autonomous LLM. PR #3 proposes an NPI
+   snapshot and adapter with stable NPI-based IDs; it is not merged into `master`. The NPI snapshot supplies
+   neither domains nor EHRs, so homepage evidence would require a separately supplied, validated domain. A
+   LangGraph prototype is on `master`, but it is not connected to FastAPI/SQLite and currently uses the points
+   scorer. Unknown EHR is explicit, never guessed; ambiguous matches retain candidates and confidence rather than
+   inventing a match.
 4. Cross-check EHR and specialty hints, run the ML and LLM scorers in parallel, and preserve both scores and
    explainable reasons.
 5. Draft and check outreach with at most two revisions. Pause for an SDR decision; only an approved or edited
@@ -103,11 +110,11 @@ or team decision before dependent work is integrated.
 
 | Owner from brainstorm | Decision or deliverable still needed | Proposed direction / unblock condition |
 | --- | --- | --- |
-| **Daniel — data agent** | Deliverable format (file or API), field names/types, stable practice ID, normalization owner, and ambiguous-match cutoff. | Use the selected **option A**: a bounded lookup tool over the practice table, not a live LLM data agent. `research.py` expects lookup requests with name/domain/location and a strategy, and candidates with stable `practice_id`, name, domain, location, specialty, provider count, source, and optional EHR plus its source. Its current match defaults (0.85 minimum and 0.10 margin) are heuristics, not probabilities; Daniel should confirm or replace them. The fetcher currently checks only the HTTPS homepage. Confirm the table contract, match policy, and whether homepage-only EHR research is sufficient. |
+| **Daniel — data agent** | Review the NPI table/adapter proposed in PR #3; confirm source, fields/provenance, practice-ID/NPI representation, provider-count estimate, and matching/domain assumptions. | Use the selected **option A**: a bounded `PracticeDirectory` lookup adapter over a local table, not a separate autonomous LLM. `research.py` sends name/domain/location lookup requests and expects candidates with stable `practice_id`, name, domain, location, specialty, provider count, source, and optional EHR plus its source. The NPI snapshot uses IDs like `npi:<digits>` but supplies no domain or EHR. Match defaults (0.85 minimum and 0.10 margin) are heuristics, not probabilities; Daniel should confirm or replace them. The fetcher checks only the HTTPS homepage, requiring a separately supplied, validated domain. |
 | **Hanna — evaluation** (continued ownership to confirm) | Validate persona mix, should-pass labels, assumed identification rates, EHR/page taxonomy coverage, and separate ground-truth schema. | The simulator and report now exist in `src/leadfinder/evaluation/`. Confirm continued evaluation ownership; calibrate assumptions with evidence when available and send taxonomy/gate findings to Sasha. Ground truth stays out of lead state. |
 | **Ashwin — lead scoring** | Exact scorer input/output contract, handling of unknown EHR and partial research, score-disagreement rule, and whether/how an LLM scorer can be evaluated. | Preserve both scores and reasons for comparison. Agree on fields with visit/research owners before implementing the graph join. |
 | **Gabriel — outreach and approval** | Checker/revision behavior, approval/edit/send-back/reject payloads, feedback format, and send-step ownership. | Keep sending disabled until explicitly agreed and implemented. The current app supports edit-and-approve or reject only; it has no send-back, automatic revision loop, or mail provider. |
-| **Mahika — orchestration** | Integration plan between the existing FastAPI/SQLite prototype and the proposed LangGraph state, checkpointing, scheduling, and retries. | LangGraph is the brainstorm's selected design, but it is not a dependency or runtime in this checkout. The research module is callable independently and emits `ResearchResult.as_dict()`; agree on the graph/state mapping and failure routing before wiring it in. |
+| **Mahika — orchestration** | Integration plan between the existing FastAPI/SQLite prototype and the LangGraph workflow, including persistence/checkpointing, scheduling, and retries. | A typed LangGraph prototype is in `src/leadfinder/orchestration.py`; it calls the ResearchAgent and points scorer, but it is not connected to FastAPI/SQLite. Confirm the graph/state mapping and failure routing before app integration. |
 | **All owners** | Confirm schemas and the proposed safety/evaluation acceptance criteria. | Test fake patient-like strings at ingestion and prove none reach persisted lead state or model prompts; separately measure threshold recall/noise, practice-match accuracy, draft-check failures, latency, and failure/partial/review-queue behavior. Record results and at least one test-driven iteration. |
 
 ### Provisional implementation choices — open for owner revision
@@ -125,13 +132,17 @@ those decisions are made.
 | **Inferred hints** | Owner/administrator role, specialty, product-line, and EHR-interest fields are deterministic heuristics, not verified visitor attributes. Specialty slugs are an initial list; EHR names reuse `KNOWN_EHRS`. | Sasha and Hanna should test whether the signals are meaningful; Ashwin decides whether to consume, down-weight, or omit them from scoring. |
 | **Practice matching** | `research.py` ranks directory candidates with a heuristic match threshold of 0.85, ambiguity threshold of 0.45, and top-candidate margin of 0.10. These values are explicitly not probabilities. | Daniel owns the directory schema, stable IDs, normalization, provenance, match policy, and calibration/replacement of these cutoffs; Hanna measures match accuracy. |
 | **Research evidence and budget** | The research agent allows at most 10 tool calls, accepts up to 50 directory candidates, and extracts EHR cues only from a candidate's public HTTPS homepage. | Daniel confirms source and domain suitability; Mahika decides graph routing/retry behavior without duplicating this bounded loop. Any broader research scope needs an explicit safety and source-quality decision. |
-| **Cross-module result shape** | Both standalone modules expose `as_dict()` output, but the field names and nesting have not been adopted as a shared lead-state schema. | Sasha, Daniel, Ashwin, and Mahika should agree on the versioned schema and unknown/partial behavior before graph or scoring integration. Update tests and schema versions when the agreed shape changes. |
+| **Cross-module result shape** | Standalone modules expose `as_dict()` output. The merged LangGraph prototype has a typed lead state and connects research facts to the points scorer, but it is not connected to FastAPI/SQLite. | Sasha, Daniel, Ashwin, and Mahika should review the schema and unknown/partial behavior before app integration. Update tests and schema versions when the agreed shape changes. |
 
-The research loop and visit-analysis/gate module are implemented and have focused unit tests. The authenticated
-gate API, SQLite review queue, reviewer decisions, a shared synthetic-local lead handoff for human-confirmed and
-exactly matched automatic identities, persona simulator, and synthetic evaluation also exist; taxonomy v2 is
-applied in the gate. The research loop's concrete directory adapter, real identity source, ingestion-time scrubber,
-external research integration, LangGraph orchestration, and the open contracts above are not. The simulated gate
+The research loop and visit-analysis/gate module are implemented and have focused unit tests. The intended target
+path is gate -> parallel intent summary and ResearchAgent -> bounded directory adapter/candidate matching ->
+optional homepage EHR evidence -> sourced result/cross-check -> parallel scoring and human-reviewed outreach. PR #3
+proposes the directory adapter; the LangGraph orchestration from PR #2 is now on `master` but is not connected to
+FastAPI/SQLite. The graph currently uses the points scorer; parallel LLM scoring remains open. The authenticated
+gate API, SQLite review queue, reviewer decisions, a shared
+synthetic-local lead handoff for human-confirmed and exactly matched automatic identities, persona simulator, and
+synthetic evaluation also exist; taxonomy v2 is applied in the gate. Real identity resolution, ingestion-time
+scrubbing, external research in the app, and the remaining cross-module contracts are not. The simulated gate
 results have not been validated on real visits or URL traffic. Until these
 items are closed, keep the current prototype runnable and clearly label remaining graph/research work as planned.
 Do not substitute synthetic identification assumptions for measured coverage or make an unknown EHR into a
@@ -146,7 +157,7 @@ evidence in the current checkout from work needed for the brainstorm's target pr
 | --- | --- | --- |
 | **1. Problem definition and AI justification — 15** | README states a health-tech lead-prioritization problem and intended SDR workflow. | State the target-user constraints and desired outcome precisely; justify learned ranking and constrained text generation against a simpler rules-only workflow, and scope what can be completed in the project timeline. |
 | **2. AI solution design and reasoning — 20** | Explainable logistic regression is compared with a points table and tree challenger; current UI documents the five-step prototype; the bounded research loop is specified in code. | Publish the final graph/data flows. Explain why visit analysis is deterministic, how the bounded tool-using research module uses evidence and match safeguards, and why human approval is retained. |
-| **3. AI implementation and integration — 35** | Working FastAPI/SQLite prototype, model training/serving, optional Anthropic writing, tested content checks and human decisions; authenticated visit-analysis API, persisted SQLite review queue, reviewer verification/closure UI, a shared synthetic-local scoring handoff for human-confirmed and exact-match automatic identities, standalone research module, persona simulator and evaluation CLI. | The endpoint trusts a caller scrub assertion; there is no real identity source, external research integration, real directory adapter, or LangGraph workflow. The LLM scoring comparison, revision loop, and send workflow are also open. Demonstrate the functioning local handoff without presenting it as live research. |
+| **3. AI implementation and integration — 35** | Working FastAPI/SQLite prototype, model training/serving, optional Anthropic writing, tested content checks and human decisions; authenticated visit-analysis API, persisted SQLite review queue, reviewer verification/closure UI, a shared synthetic-local scoring handoff for human-confirmed and exact-match automatic identities, standalone research module, LangGraph orchestration prototype and tests, persona simulator and evaluation CLI. | The endpoint trusts a caller scrub assertion. On `master`, there is no real identity source or external research integration; the NPI adapter remains proposed in PR #3, and the graph is not connected to the app. The LLM scoring comparison and the app-level revision/send workflow are also open. Demonstrate the functioning local handoff without presenting it as live research. |
 | **4. Testing, evaluation, iterative improvement — 25** | Tests cover the research loop with fake adapters, visit-analysis features/gate edge cases, persona-based gate/taxonomy/matching evaluation, and held-out synthetic scorer comparisons. The taxonomy v2 change was prompted by observed simulated false passes. | Validate persona assumptions and taxonomy on representative real URLs/data; measure real identity coverage, threshold and match behavior, failure/latency evidence, and safety. Synthetic-label metrics are not real-world effectiveness evidence. |
 | **5. Responsible AI, ethics, alignment — 15** | Outreach text is checked; generation uses selected business facts; human review is required; sending is disabled; visit analysis fails closed on an input marked unsanitized; limitations of simulated conversion are disclosed. | Implement and test actual pre-model ingestion minimization/scrubbing (the gate's boolean is only a contract), provenance/confidence and unknown handling, match ambiguity review, bounded retries, and explicit failure reporting. Discuss privacy, bias, false identification, hallucinations, and misuse. |
 | **6. Documentation and reproducibility — 10** | README has setup/configuration/test instructions; seeded synthetic generation and model versions support repeatability. This handoff records design status and unresolved interfaces. | Document final architecture, data/model/prompt versions, external services, graph configuration, evaluation procedure/results, and any access/setup requirements after decisions are closed. |
