@@ -33,6 +33,12 @@ from .writer import Writer, WriterError
 
 MAX_REVISIONS = 2
 
+# The visit gate labels pages by category ("pricing"); the scorer expects URL-style keys ("/pricing").
+# This mirrors VISIT_PAGES in seed.py (the app's existing handoff). Once this branch is merged, import that
+# instead of keeping a second copy.
+SCORER_PAGES = {"demo_or_trial": "/demo", "pricing": "/pricing", "ehr_integration": "/integrations",
+                "usability": "/features", "blog": "/blog"}
+
 OUTCOMES = ("awaiting_approval", "sent", "rejected", "partial", "review_queue", "stopped", "blocked")
 
 
@@ -125,7 +131,7 @@ def score(state: LeadState, deps: Deps) -> dict:
     specialty = facts["specialty"]["value"] or "unknown"
     providers = facts["provider_count"]["value"] or 0
     ehr = facts["ehr"]["value"]        # unknown EHR stays None; it is never guessed
-    visits = [(p["page"], p["viewed_at"]) for p in state["visit"]["pages_viewed"]]
+    visits = [(SCORER_PAGES.get(p["category"], "/unmapped"), p["viewed_at"]) for p in state["visit"]["pages_viewed"]]
     result = score_practice(specialty, int(providers), ehr, visits, now=state["visit"]["window_end"])
     data = {"total": result.total, "band": result.band, "reasons": [r.as_dict() for r in result.reasons]}
     return {"scoring": data, "trace": _trace("score", total=result.total, band=result.band)}
