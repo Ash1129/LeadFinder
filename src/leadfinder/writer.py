@@ -57,6 +57,15 @@ BRIEF_TASK = """Write a call brief the rep reads in the minute before phoning th
 no-shows hurt, who decides).
 - objections: exactly two this practice is likely to raise given its record, each with a one-sentence honest reply."""
 
+REVISE_TASK = """Rewrite this email to the same practice. Everything in the first task still applies.
+
+{why}
+
+The draft to rewrite:
+Subject: {subject}
+
+{body}"""
+
 EMAIL_SCHEMA = {
     "type": "object",
     "properties": {"subject": {"type": "string"}, "body": {"type": "string"}},
@@ -195,11 +204,28 @@ class Claude:
             raise WriterError("Claude's answer was not the JSON asked for")
         return data
 
-    def email(self, practice: dict, reasons: list[dict], visits: list[str]) -> tuple[str, str]:
-        data = self._ask(EMAIL_TASK.format(seller=outreach.SELLER), practice, reasons, visits, EMAIL_SCHEMA)
+    def draft_email(self, practice: dict, reasons: list[dict], visits: list[str], *, previous: Optional[tuple[str, str]] = None,
+                    problems: Optional[list[str]] = None, note: Optional[str] = None) -> tuple[str, str]:
+        """One draft, unchecked: the caller checks it (`email` below, or the revision loop in revision.py).
+        With `previous`, Claude rewrites that draft, told what the checks found (`problems`) and/or what the SDR
+        asked for when sending it back (`note`). The footer is added by code either way."""
+        task = EMAIL_TASK.format(seller=outreach.SELLER)
+        if previous is not None:
+            why = []
+            if problems:
+                why.append("The checker stopped it for these reasons; fix every one:\n- " + "\n- ".join(problems))
+            if note:
+                why.append("The sales rep sent it back with this note. Follow it unless it conflicts with the rules "
+                           f"above, which always win:\n{note}")
+            old_body = previous[1].split("\n\n--\n")[0]                 # the model never sees or writes the footer
+            task += "\n\n" + REVISE_TASK.format(why="\n\n".join(why) or "Improve it.", subject=previous[0], body=old_body)
+        data = self._ask(task, practice, reasons, visits, EMAIL_SCHEMA)
         subject = str(data.get("subject", "")).strip()
         body = str(data.get("body", "")).replace("\r\n", "\n").strip()
-        body = f"{body}\n\n--\n{outreach.FOOTER}"                       # the footer is code's, never the model's
+        return subject, f"{body}\n\n--\n{outreach.FOOTER}"              # the footer is code's, never the model's
+
+    def email(self, practice: dict, reasons: list[dict], visits: list[str]) -> tuple[str, str]:
+        subject, body = self.draft_email(practice, reasons, visits)
         problems = outreach.check(subject, body) + outreach.ungrounded(f"{subject}\n{body}", practice)
         if problems:
             raise WriterError("Claude's draft did not pass the checks: " + "; ".join(problems))

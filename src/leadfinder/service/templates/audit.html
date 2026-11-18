@@ -38,4 +38,25 @@
   <p class="muted">No decisions yet.</p>
   {% endif %}
 </section>
+
+{% if fb %}
+{%- set dc = fb.decisions -%}{%- set sb = fb.send_backs -%}{%- set ck = fb.draft_checks -%}
+<section class="au-sec">
+  <h2 id="au-feedback" class="kicker">Outreach feedback · what the decisions and the checks say{% call note('fb-note', 'What this is') %}<span class="ln">Counted from what is already logged: the decisions above, every draft the checks saw, and every send-back. Nothing here changes the model; learning from it is still to come.</span><span class="ln">The same numbers are at /api/outreach-feedback as JSON, for evaluation.</span>{% endcall %}</h2>
+  <div class="scroll">
+    <table class="au-table">
+      <thead><tr><th scope="col">Measure</th><th scope="col" class="r">Count</th><th scope="col">Detail</th></tr></thead>
+      <tbody>
+        <tr><td>Approved as drafted</td><td class="r num">{{ dc.approved_as_drafted }}</td><td class="small">{% if dc.approved %}{{ ((1 - dc.edit_rate_of_approvals) * 100)|round|int }}% of approvals{% endif %}</td></tr>
+        <tr><td>Approved after an edit</td><td class="r num">{{ dc.approved_edited }}</td><td class="small">{% if dc.approved %}{{ (dc.edit_rate_of_approvals * 100)|round|int }}% of approvals{% endif %}</td></tr>
+        <tr><td>Rejected</td><td class="r num">{{ dc.rejected }}</td><td class="small">{% for k, n in dc.rejected_by_reason.items() %}{{ reject_reasons.get(k, k)|capitalize }}: {{ n }}{{ '; ' if not loop.last }}{% endfor %}</td></tr>
+        <tr><td>Sent back</td><td class="r num">{{ sb.total }}</td><td class="small">{% if sb.total %}{{ sb.rewritten }} rewritten, {{ sb.failed }} not; {{ sb.leads }} lead{{ 's' if sb.leads != 1 }}, {{ sb.leads_approved_after }} approved since{% endif %}</td></tr>
+        <tr><td>Drafts written</td><td class="r num">{{ ck.rounds }}</td><td class="small">{% if ck.rounds %}{{ ck.passed_first_try }} passed the checks first time, {{ ck.passed_after_revision }} after a revision, {{ ck.never_passed }} never; {{ ck.attempts }} tries in all{% endif %}</td></tr>
+        <tr><td>Why drafts failed the checks</td><td class="r num">{{ ck.failed_attempts }}</td><td class="small">{% for k, n in ck.problems.items() %}{{ k|capitalize }}: {{ n }}{{ '; ' if not loop.last }}{% endfor %}</td></tr>
+        {% if fb.outbox %}<tr><td>In the outbox</td><td class="r num">{{ fb.outbox.values()|sum }}</td><td class="small">{% for k, n in fb.outbox.items() %}{{ 'dry run, not sent' if k == 'dry_run' else k }}: {{ n }}{{ '; ' if not loop.last }}{% endfor %}</td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
 {% endblock %}

@@ -134,6 +134,48 @@ CREATE TABLE IF NOT EXISTS lead_handoffs(
   is_demo INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS lead_handoffs_created ON lead_handoffs(created_at);
+-- Outreach (revision.py, sender.py, feedback.py): every draft the checks saw, every send-back, and the outbox.
+CREATE TABLE IF NOT EXISTS draft_attempts(
+  id INTEGER PRIMARY KEY,
+  lead_id INTEGER NOT NULL REFERENCES leads(id),
+  round TEXT NOT NULL,
+  purpose TEXT NOT NULL CHECK(purpose IN ('write', 'send_back')),
+  attempt INTEGER NOT NULL,
+  writer TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  problems TEXT NOT NULL,
+  passed INTEGER NOT NULL,
+  kept INTEGER NOT NULL DEFAULT 0,
+  username TEXT NOT NULL,
+  at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS draft_attempts_lead ON draft_attempts(lead_id, at);
+CREATE TABLE IF NOT EXISTS send_backs(
+  id INTEGER PRIMARY KEY,
+  lead_id INTEGER NOT NULL REFERENCES leads(id),
+  username TEXT NOT NULL,
+  note TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  outcome TEXT NOT NULL CHECK(outcome IN ('rewritten', 'failed')),
+  detail TEXT,
+  at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS send_backs_lead ON send_backs(lead_id, at);
+CREATE TABLE IF NOT EXISTS outbox(
+  id INTEGER PRIMARY KEY,
+  lead_id INTEGER UNIQUE NOT NULL REFERENCES leads(id),
+  to_name TEXT,
+  to_email TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  body TEXT NOT NULL,
+  sender TEXT NOT NULL,
+  status TEXT NOT NULL,
+  detail TEXT,
+  queued_by TEXT NOT NULL,
+  queued_at REAL NOT NULL
+);
 """
 
 
