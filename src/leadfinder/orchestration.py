@@ -68,6 +68,18 @@ class Deps:
     sender: Optional[Callable[[dict], None]] = None  # real email send; None means "approved, not sent"
 
 
+def build_research_agent(directory=None, website=None, model=None) -> ResearchAgent:
+    """The research agent the pipeline uses. By default it looks practices up in the committed NPI table
+    (`npi.TablePracticeDirectory`), checks homepages over HTTPS, and lets Claude drive the bounded tool loop
+    (needs ANTHROPIC_API_KEY). Any part can be replaced, which is how the tests run offline."""
+    from .npi import TablePracticeDirectory
+    from .research import AnthropicResearchModel, HttpxPracticeWebsite
+
+    return ResearchAgent(directory or TablePracticeDirectory.from_file(),
+                         website or HttpxPracticeWebsite(),
+                         model or AnthropicResearchModel())
+
+
 def _trace(step: str, **info: Any) -> list:
     return [{"step": step, **info}]
 
@@ -138,9 +150,11 @@ def score(state: LeadState, deps: Deps) -> dict:
 
 
 def _practice_row(state: LeadState) -> dict:
+    """The practice as the writer and checker expect it. A fact research could not find gets a neutral stand-in
+    so the draft reads naturally; the EHR stays None (never guessed) and is simply not mentioned."""
     facts = state["research"]["facts"]
-    return {"name": state["visit"]["practice_name_raw"], "specialty": facts["specialty"]["value"],
-            "providers": facts["provider_count"]["value"], "city": facts["location"]["value"],
+    return {"name": state["visit"]["practice_name_raw"], "specialty": facts["specialty"]["value"] or "medical",
+            "providers": facts["provider_count"]["value"] or 0, "city": facts["location"]["value"] or "your area",
             "ehr": facts["ehr"]["value"], "contact_name": None}
 
 
