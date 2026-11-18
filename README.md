@@ -32,19 +32,20 @@ exact local name match (narrowed by location when supplied) share a handoff: der
 to the local practice and
 its existing lead is created or rescored. This is synthetic local-record lookup and scoring, not external research.
 The bounded prospect-research module in `src/leadfinder/research.py` now has a real practice-directory adapter,
-`npi.TablePracticeDirectory`, over a table of real practices from the NPI registry, but nothing in the app or graph
-constructs a ResearchAgent with it yet. A LangGraph orchestration prototype in `src/leadfinder/orchestration.py` calls the ResearchAgent and
-points scorer, but it is not connected to FastAPI/SQLite. Do not present this as a live
+`npi.TablePracticeDirectory`, over a table of real practices from the NPI registry. The LangGraph orchestration prototype in
+`src/leadfinder/orchestration.py` uses it: `orchestration.default_deps()` builds its ResearchAgent over that table
+(Claude when a credential is set, a fixed-rules stand-in otherwise), and `python -m leadfinder.orchestration` runs a
+simulated visit for a real practice through research, scoring, drafting and the approval pause. The graph is still
+not connected to FastAPI/SQLite. Do not present this as a live
 visitor-tracking-to-research workflow.
 
 The target post-gate flow is: the ResearchAgent sends name/domain/location lookup requests to a bounded
 `PracticeDirectory` adapter, receives candidate records, applies code-based match safeguards, and may inspect a
 returned candidate's HTTPS homepage for recognized EHR evidence. It returns a sourced research result for a later
-cross-check and scoring step. The adapter is a data lookup tool, not a second autonomous LLM agent. This flow is
-not wired into the running app on `master`: the NPI table and adapter from
-[PR #3](https://github.com/Ash1129/LeadFinder/pull/3) are merged but not yet passed to the ResearchAgent, while the
-orchestration prototype from
-[PR #2](https://github.com/Ash1129/LeadFinder/pull/2) is now on `master` but is not connected to FastAPI/SQLite.
+cross-check and scoring step. The adapter is a data lookup tool, not a second autonomous LLM agent. This flow runs
+in the orchestration prototype from [PR #2](https://github.com/Ash1129/LeadFinder/pull/2) over the NPI table and
+adapter from [PR #3](https://github.com/Ash1129/LeadFinder/pull/3), but not in the running app: the graph is not
+connected to FastAPI/SQLite.
 That prototype uses a points scorer; parallel LLM scoring and full app input/output and failure contracts remain
 open. The NPI table provides stable `npi:<digits>` practice IDs but has no domain or EHR data; a website check
 therefore needs a separately supplied, validated domain.
@@ -181,9 +182,9 @@ next version and put it to the scorecard:
 - Integration of the LangGraph prototype with FastAPI/SQLite and persisted human-review outcomes. The current
   graph runs the gate, ResearchAgent, points scorer, checked drafting, and approval routing; the app still does
   not invoke it. Parallel ML/LLM scoring and the post-gate intent summary remain planned.
-- Wiring the NPI table into the research path. The table and `npi.TablePracticeDirectory` are on `master`
-  (see [docs/npi-data.md](./docs/npi-data.md)), and `LEADFINDER_PRACTICES=npi` seeds the demo from it, but no
-  ResearchAgent in the app or graph is built with the adapter yet.
+- Research inside the running app. The orchestration graph researches real practices from the NPI table
+  (`orchestration.default_deps()`, see [docs/npi-data.md](./docs/npi-data.md)), but the FastAPI app does not run
+  the graph, so app leads still come from seeding (`LEADFINDER_PRACTICES=npi` for real practices).
 - Persona-based visit simulation and evaluation now exist (`src/leadfinder/evaluation/`, results in
   `docs/evaluation-report.md`). Taxonomy v2 is applied in the standalone gate; its simulation results are not
   evidence of real-traffic performance. The proposed research match-margin change is not applied and needs

@@ -13,6 +13,7 @@ Owner: Daniel (@Dami047), data agent. This answers the data questions the README
 | Name normalization | `research.normalize_name` | Drops legal forms (PC, PLLC, LLC, Inc, MD...), joins split initials ("P.C."), and ignores "and"/"&" before names are compared |
 | Matching evaluation | `src/leadfinder/evaluation/npi_match.py` → [npi-match-report.md](./npi-match-report.md) | Measures matching on real registry names and sweeps the cutoffs |
 | Real practices in the app | `LEADFINDER_PRACTICES=npi` | Seeds the demo from the table instead of made-up practices (visits are still simulated) |
+| Connection to the workflow | `orchestration.build_research_agent()`, `default_deps()` | The orchestration graph's research step searches the table. Claude makes the research decisions when a credential is set; otherwise `research.RulesResearchModel` follows fixed rules (look up, check the website if there is a domain, select the top candidate only above the threshold) under the same safeguards |
 | Tests | `tests/test_npi.py` | Parser, filters, provider estimate, entity merge, API paging and errors (mocked, no network), directory, an end-to-end research run on real table rows, the committed table's validity, seeding, the lead page |
 
 ## Decisions on the open questions
@@ -118,6 +119,7 @@ contact practices is still subject to CAN-SPAM for email and TCPA for calls, and
 .venv/bin/python -m leadfinder.npi build                 # about 480 requests, 2 to 3 minutes; rewrites the table
 .venv/bin/python -m leadfinder.evaluation.npi_match      # rewrites docs/npi-match-report.md and .json
 LEADFINDER_PRACTICES=npi .venv/bin/uvicorn asgi:app --port 8010   # on a fresh database
+.venv/bin/python -m leadfinder.orchestration "linden oaks"  # one simulated visit for a real practice, through the graph
 .venv/bin/python -m pytest -q tests/test_npi.py          # offline: uses the committed table and mocked HTTP
 ```
 
