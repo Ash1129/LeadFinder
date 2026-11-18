@@ -45,6 +45,9 @@
 {% if wrote %}<p class="notice" role="status"><b>{{ 'Written by Claude.' if writer.is_model else 'Written.' }}</b> The {{ 'email' if wrote == 'email' else 'call brief' }} below is new{% if writer.is_model %}; it passed the checks, and it is still yours to read before you use it{% endif %}.</p>{% endif %}
 {% if write_error %}<p class="notice warn" role="alert"><b>Not written.</b> {{ write_error }}</p>{% endif %}
 {% if blocked %}<p class="notice warn" role="alert"><b>Not approved.</b> The guardrail stopped this draft: {{ problems|join('; ') }}.</p>{% endif %}
+{% if sent_back %}<p class="notice" role="status"><b>Sent back and rewritten.</b> Claude rewrote the email from your note and the rewrite passed the checks. Read it again before you approve it.</p>{% endif %}
+{% if queued and outbox %}<p class="notice" role="status"><b>{{ 'Recorded, not sent.' if outbox.status == 'dry_run' else 'Handed to the sender.' }}</b> {{ outbox.detail|capitalize }}.</p>{% endif %}
+{% if send_error %}<p class="notice warn" role="alert"><b>Not queued.</b> {{ send_error }}</p>{% endif %}
 
 <hr class="rule">
 
@@ -100,6 +103,14 @@
         {% if problems and not blocked %}<p class="notice warn"><b>The guardrail would stop this.</b> {{ problems|join('; ') }}.</p>{% endif %}
         <div class="actions"><button class="btn primary" type="submit" data-busy="Approving…">Approve the email</button></div>
       </form>
+      {% if can_send_back %}
+      <form class="reject" method="post" action="/lead/{{ d.id }}/send-back">
+        <input type="hidden" name="seen" value="{{ token }}">
+        <div class="field"><label for="send-back-note">Or send it back to Claude with a note · {{ send_backs_left }} of 2 left</label>
+          <input id="send-back-note" name="note" maxlength="500" placeholder="e.g. shorter, and lead with the waitlist" required{% if not send_backs_left %} disabled{% endif %}></div>
+        <button class="btn" type="submit" data-busy="Claude is rewriting…"{% if not send_backs_left %} disabled{% endif %}>Send back</button>
+      </form>
+      {% endif %}
       {% else %}
       <form class="byline" method="post" action="/lead/{{ d.id }}/write">
         <input type="hidden" name="what" value="email">
@@ -118,6 +129,16 @@
       <p class="small muted">To {{ d.contact_name }} &lt;{{ d.contact_email }}&gt;</p>
       <p><b>{{ d.subject }}</b></p>
       <p class="draft-body">{{ d.body }}</p>
+      {% if d.status == 'approved' and sender %}
+      {% if outbox %}
+      <p class="small muted">In the outbox ({{ outbox.sender }}): {{ outbox.detail }} · {{ outbox.queued_at|when }} UTC</p>
+      {% elif can.act_on_leads %}
+      <form class="byline" method="post" action="/lead/{{ d.id }}/send">
+        <p class="small muted">{% if sender.name == 'dry-run' %}Sending is in dry-run mode: this records the approved email in the outbox and sends nothing.{% else %}This hands the approved email to {{ sender.name }}.{% endif %}</p>
+        <button class="btn" type="submit" data-busy="Queuing…">{{ 'Queue it (dry run)' if sender.name == 'dry-run' else 'Send it' }}</button>
+      </form>
+      {% endif %}
+      {% endif %}
       {% else %}
       <p class="muted">No email {{ 'was written for this lead' if d.status != 'new' else 'has been written for this lead yet' }}.</p>
       {% endif %}
@@ -141,6 +162,16 @@
       </form>
       {% endif %}
     </section>
+
+    {% if send_backs %}
+    <section class="sec">
+      <h2 id="ld-send-backs" class="kicker">Sent back · {{ send_backs|length }}</h2>
+      <ul class="history">{% for s in send_backs %}
+        <li><span><b>{{ s.who or s.username }}</b> sent the draft back: “{{ s.note }}”</span>
+          <span class="small muted">{{ s.at|when }} UTC · {{ 'rewritten by Claude' if s.outcome == 'rewritten' else 'not rewritten' }}{% if s.detail %} · {{ s.detail }}{% endif %}</span></li>
+      {% endfor %}</ul>
+    </section>
+    {% endif %}
 
     {% if history %}
     <section class="sec">

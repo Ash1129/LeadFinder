@@ -118,6 +118,12 @@ an approved upstream scrubber and identity source are in place.
 To have Claude write the emails and call briefs, put `ANTHROPIC_API_KEY=...` in a `.env` file beside `asgi.py`
 (it is gitignored; `.env.example` lists every setting) and restart. The tests never call the API.
 
+Outreach options, both off unless set: `LEADFINDER_REVISIONS=2` lets Claude rewrite a draft that fails the checks up to
+twice, told what failed; `LEADFINDER_SENDER=dry-run` adds a button on approved leads that records the email in an
+outbox table without sending it. With Claude writing, an SDR can also send a draft back with a note (at most twice per
+lead); the rewrite passes the same checks. Every draft the checks saw, every send-back and the outbox are logged, and
+the sales manager sees a feedback summary under the audit log.
+
 The first start fits six versions of the model, one for each simulated month of history, and a scorecard decides
 which is live (the Scoring model page shows all six side by side with the decision on each). To add a month, fit the
 next version and put it to the scorecard:
@@ -139,6 +145,9 @@ next version and put it to the scorecard:
 | `src/leadfinder/scoring.py` | the hand-set points table |
 | `src/leadfinder/outreach.py` | the template email and the checks (no patient data, no claims we can't back, the CAN-SPAM footer, nothing off the record) |
 | `src/leadfinder/writer.py` | who writes the email and the call brief: Claude through the Anthropic SDK, or the templates |
+| `src/leadfinder/revision.py` | draft, check, revise: at most two revisions told what the checks found, and the SDR's send-back with a note |
+| `src/leadfinder/sender.py` | the send step: off by default; `dry-run` records approved emails in an outbox and sends nothing |
+| `src/leadfinder/feedback.py` | the outreach feedback summary (approvals, edits, rejections, send-backs, draft-check failures) on the audit page and at `/api/outreach-feedback` |
 | `src/leadfinder/seed.py` | synthetic practices with valid-format NPIs, and their visits |
 | `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
 | `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate |
@@ -170,5 +179,5 @@ next version and put it to the scorecard:
   and scoring logic, not the research module or external sources.
 - An actual ingestion-time patient-data scrubber and approved company-identity source. The gate API only checks
   the caller's `patient_data_stripped` flag; it is not a privacy filter. Also open: per-node graph traces/retries,
-  draft revision/send-back, and feedback-driven scoring. Existing outreach checks are not a substitute for the
+  real sending (only a dry-run outbox exists) and feedback-driven scoring. Existing outreach checks are not a substitute for the
   proposed ingestion guardrail.

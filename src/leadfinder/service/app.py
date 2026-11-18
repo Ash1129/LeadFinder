@@ -20,6 +20,7 @@ import json
 import os
 import sqlite3
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -29,10 +30,11 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from pydantic import BaseModel, ConfigDict, Field, FiniteFloat
 from fastapi.templating import Jinja2Templates
 
-from .. import auth, ml, outreach
+from .. import auth, feedback, ml, outreach, revision
 from ..db import DEFAULT_DB, connect
 from ..seed import apply_model, process_local_visit_handoff, seed, seed_demo_review_cases
 from ..visit_analysis import PageView, VisitAnalysisInput, analyze_visits
+from ..sender import Message, SendError, Sender, make_sender
 from ..writer import Writer, WriterError, make_writer
 from . import security
 from .security import SESSION_COOKIE, THEME_COOKIE, clear_session_cookie, lead_token, safe_next, set_session_cookie
@@ -99,12 +101,17 @@ def why(row) -> dict:
     return d
 
 
-def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional[Writer] = None) -> FastAPI:
+def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional[Writer] = None,
+               sender: Optional[Sender] = None, revisions: Optional[int] = None) -> FastAPI:
     """`demo`: on an empty database, fill it with synthetic practices and the demo logins. None reads
     LEADFINDER_DEMO (on unless set to 0). `writer`: who writes emails and call briefs on request; None picks Claude
-    when a credential is set and the templates otherwise (writer.make_writer)."""
+    when a credential is set and the templates otherwise (writer.make_writer). `sender`: the send step; None reads
+    LEADFINDER_SENDER, which is off unless set (sender.make_sender). `revisions`: how many times a draft that fails
+    the checks is rewritten, 0 to 2; None reads LEADFINDER_REVISIONS, 0 unless set (revision.py)."""
     conn = connect(db_path)
     writer = writer or make_writer()
+    sender = sender if sender is not None else make_sender()
+    revisions = revision.revisions_from_env() if revisions is None else max(0, min(int(revisions), revision.MAX_REVISIONS))
     ml.ensure(conn)                     # the trained scorer: fitted on first start (a few seconds), then read from the database
     demo_mode = demo if demo is not None else os.environ.get("LEADFINDER_DEMO", "1") != "0"
     if demo_mode:
@@ -119,6 +126,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
     app.middleware("http")(security.guard)        # host and origin checks, security headers (runs first)
     app.state.conn = conn
     app.state.writer = writer
+    app.state.sender = sender
 
     def theme(request: Request) -> str:
         return request.cookies.get(THEME_COOKIE, "system")
@@ -169,13 +177,35 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         d["chance_reasons"] = json.loads(d["chance_reasons"]) if d["chance_reasons"] else []
         return d
 
+    def visit_pages(d: dict) -> list[str]:
+        return [r["page"] for r in conn.execute("SELECT page FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
+
+    def log_attempts(request: Request, lead_id: int, purpose: str, attempts: list, kept: bool) -> None:
+        """Every draft the checks saw, passed or not; the one kept on the lead is marked (feedback.py reads these)."""
+        if not attempts:
+            return
+        round_id, now = uuid.uuid4().hex, time.time()
+        for a in attempts:
+            conn.execute("INSERT INTO draft_attempts(lead_id, round, purpose, attempt, writer, subject, body, problems, passed, kept, "
+                         "username, at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                         (lead_id, round_id, purpose, a.n, writer.name, a.subject, a.body, json.dumps(a.problems), int(a.passed),
+                          int(kept and a is attempts[-1]), request.state.me.username, now))
+
     def lead_page(request: Request, d: dict, status_code: int = 200, **kw):
         """The lead's page, for the plain view and for every way a write on it can come back refused."""
         visits = [dict(r) for r in conn.execute("SELECT page, at FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
         history = [dict(r) for r in conn.execute("SELECT a.*, s.name who FROM audit a LEFT JOIN staff s ON s.username = a.username "
                                                  "WHERE a.lead_id=? ORDER BY a.at DESC", (d["id"],))]
         drafted = bool(d["subject"] or d["body"])       # a lead has no email until someone asks for one
-        base = dict(nav="leads", d=d, visits=visits, history=history, drafted=drafted,
+        send_backs = [dict(r) for r in conn.execute("SELECT s.*, st.name who FROM send_backs s LEFT JOIN staff st ON st.username = s.username "
+                                                    "WHERE s.lead_id=? ORDER BY s.at DESC", (d["id"],))]
+        outbox = conn.execute("SELECT * FROM outbox WHERE lead_id=?", (d["id"],)).fetchone()
+        kw.setdefault("send_backs", send_backs)
+        kw.setdefault("send_backs_left", max(0, revision.MAX_SEND_BACKS - len(send_backs)))
+        kw.setdefault("can_send_back", revision.can_revise(writer))
+        kw.setdefault("sender", sender)
+        kw.setdefault("outbox", dict(outbox) if outbox else None)
+        base = dict(nav="leads", d=d, visits=visits, history=history, drafted=drafted, sent_back=False, queued=False, send_error="",
                     problems=outreach.check(d["subject"], d["body"]) if drafted else [],
                     token=lead_token(conn, d["id"]), reject_reasons=REJECT_REASONS, stale=False, done="", wrote="",
                     write_error="", blocked=False, now=time.time())
@@ -515,9 +545,10 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         )
 
     @app.get("/lead/{lead_id}", response_class=HTMLResponse)
-    def lead(request: Request, lead_id: int, stale: str = "", done: str = "", wrote: str = ""):
+    def lead(request: Request, lead_id: int, stale: str = "", done: str = "", wrote: str = "", sentback: str = "", queued: str = ""):
         allow(request, "view_leads")
-        return lead_page(request, lead_row(lead_id), stale=stale == "1", done=done, wrote=wrote if wrote in ("email", "brief") else "")
+        return lead_page(request, lead_row(lead_id), stale=stale == "1", done=done, wrote=wrote if wrote in ("email", "brief") else "",
+                         sent_back=sentback == "1", queued=queued == "1")
 
     @app.post("/lead/{lead_id}/write")
     def write(request: Request, lead_id: int, what: str = Form(...)):
@@ -529,12 +560,17 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
             raise HTTPException(400, "write the email or the brief")
         if what == "email" and d["status"] != "new":
             return RedirectResponse(f"/lead/{lead_id}?stale=1", status_code=303)
-        pages = [r["page"] for r in conn.execute("SELECT page FROM visits WHERE practice_id=? ORDER BY at DESC", (d["practice_id"],))]
+        pages = visit_pages(d)
         try:
             if what == "email":
-                subject, body = writer.email(d, d["reasons"], pages)
+                try:
+                    drafted = revision.write_email(writer, d, d["reasons"], pages, revisions=revisions)
+                except WriterError as e:
+                    log_attempts(request, lead_id, "write", getattr(e, "attempts", []), kept=False)
+                    raise
+                log_attempts(request, lead_id, "write", drafted.attempts, kept=True)
                 conn.execute("UPDATE leads SET subject=?, body=?, written_by=? WHERE id=? AND status='new'",
-                             (subject, body, writer.name, lead_id))
+                             (drafted.subject, drafted.body, writer.name, lead_id))
             else:
                 brief = writer.brief(d, d["reasons"], pages)
                 conn.execute("UPDATE leads SET brief=?, brief_by=? WHERE id=?", (json.dumps(brief), writer.name, lead_id))
@@ -574,12 +610,83 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
             raise HTTPException(400, "pick one of the reasons")
         return decide(request, lead_id, seen, "rejected", reason=reason, note=note.strip()[:500])
 
+    @app.post("/lead/{lead_id}/send-back")
+    def send_back(request: Request, lead_id: int, note: str = Form(""), seen: str = Form("")):
+        """Send the drafted email back with a note: Claude rewrites it from the note, the rewrite passes the same checks
+        (and the same bounded revision loop), and it replaces the draft. The lead stays undecided. At most
+        MAX_SEND_BACKS per lead; each one is logged, rewritten or not. Not an approval or a rejection, so the audit
+        log and its counts are untouched."""
+        me = allow(request, "act_on_leads")
+        d = lead_row(lead_id)
+        if seen != lead_token(conn, lead_id) or d["status"] != "new":
+            return RedirectResponse(f"/lead/{lead_id}?stale=1", status_code=303)
+        if not revision.can_revise(writer):
+            raise HTTPException(400, "the template cannot be sent back; edit the draft yourself")
+        if not (d["subject"] or d["body"]):
+            raise HTTPException(400, "there is no draft to send back yet")
+        try:
+            note = revision.clean_note(note)
+        except ValueError as e:
+            return lead_page(request, d, status_code=422, write_error=f"{str(e)[:1].upper()}{str(e)[1:]}.")
+        used = conn.execute("SELECT COUNT(*) n FROM send_backs WHERE lead_id=?", (lead_id,)).fetchone()["n"]
+        if used >= revision.MAX_SEND_BACKS:
+            return lead_page(request, d, status_code=409, write_error=f"This draft has been sent back {used} times, the most allowed. "
+                                                                    "Edit it yourself, approve it or reject the lead.")
+        try:
+            drafted = revision.write_email(writer, d, d["reasons"], visit_pages(d), revisions=revisions,
+                                           note=note, previous=(d["subject"], d["body"]))
+        except WriterError as e:
+            log_attempts(request, lead_id, "send_back", getattr(e, "attempts", []), kept=False)
+            conn.execute("INSERT INTO send_backs(lead_id, username, note, subject, body, outcome, detail, at) VALUES(?,?,?,?,?,?,?,?)",
+                         (lead_id, me.username, note, d["subject"], d["body"], "failed", str(e)[:500], time.time()))
+            return lead_page(request, lead_row(lead_id), status_code=502,
+                             write_error=f"{str(e)[:1].upper()}{str(e)[1:]}. The draft is unchanged.")
+        log_attempts(request, lead_id, "send_back", drafted.attempts, kept=True)
+        updated = conn.execute("UPDATE leads SET subject=?, body=?, written_by=? WHERE id=? AND status='new'",
+                               (drafted.subject, drafted.body, writer.name, lead_id)).rowcount
+        if not updated:                                  # decided while Claude was writing: the decision stands
+            return RedirectResponse(f"/lead/{lead_id}?stale=1", status_code=303)
+        conn.execute("INSERT INTO send_backs(lead_id, username, note, subject, body, outcome, detail, at) VALUES(?,?,?,?,?,?,?,?)",
+                     (lead_id, me.username, note, d["subject"], d["body"], "rewritten",
+                      f"{drafted.revisions} revision{'s' if drafted.revisions != 1 else ''} after the checks", time.time()))
+        return RedirectResponse(f"/lead/{lead_id}?sentback=1", status_code=303)
+
+    @app.post("/lead/{lead_id}/send")
+    def send(request: Request, lead_id: int):
+        """Hand an approved email to the send step. Off unless LEADFINDER_SENDER is set; the only sender today is the
+        dry run, which records the message in the outbox and sends nothing. Once per lead."""
+        me = allow(request, "act_on_leads")
+        if sender is None:
+            raise HTTPException(404, "sending is off")
+        d = lead_row(lead_id)
+        if d["status"] != "approved":
+            return RedirectResponse(f"/lead/{lead_id}?stale=1", status_code=303)
+        if conn.execute("SELECT 1 FROM outbox WHERE lead_id=?", (lead_id,)).fetchone():
+            return RedirectResponse(f"/lead/{lead_id}?queued=1", status_code=303)
+        message = Message(d["contact_name"], d["contact_email"] or "", d["subject"], d["body"])
+        try:
+            receipt = sender.send(message)
+        except SendError as e:
+            return lead_page(request, d, status_code=422, send_error=f"{str(e)[:1].upper()}{str(e)[1:]}.")
+        conn.execute("INSERT OR IGNORE INTO outbox(lead_id, to_name, to_email, subject, body, sender, status, detail, queued_by, queued_at) "
+                     "VALUES(?,?,?,?,?,?,?,?,?,?)",
+                     (lead_id, message.to_name, message.to_email, message.subject, message.body, sender.name, receipt.status,
+                      receipt.detail, me.username, time.time()))
+        return RedirectResponse(f"/lead/{lead_id}?queued=1", status_code=303)
+
+    @app.get("/api/outreach-feedback")
+    def outreach_feedback(request: Request):
+        """The feedback summary as JSON, for evaluation (feedback.py). Manager only, like the audit log."""
+        allow(request, "view_audit")
+        return JSONResponse(feedback.summary(conn))
+
     @app.get("/audit", response_class=HTMLResponse)
     def audit(request: Request):
         allow(request, "view_audit")
         rows = [dict(r) for r in conn.execute("SELECT a.*, s.name who, p.name practice FROM audit a LEFT JOIN staff s ON s.username = a.username "
                                               "JOIN leads l ON l.id = a.lead_id JOIN practices p ON p.id = l.practice_id ORDER BY a.at DESC LIMIT 500")]
-        return TEMPLATES.TemplateResponse(request, "audit.html", ctx(request, nav="audit", rows=rows, reject_reasons=REJECT_REASONS))
+        return TEMPLATES.TemplateResponse(request, "audit.html", ctx(request, nav="audit", rows=rows, reject_reasons=REJECT_REASONS,
+                                                                      fb=feedback.summary(conn)))
 
     @app.get("/model", response_class=HTMLResponse)
     def model_page(request: Request):
