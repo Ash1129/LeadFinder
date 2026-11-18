@@ -29,7 +29,7 @@ from . import outreach
 from .research import ResearchAgent, ResearchRequest
 from .scoring import score_practice
 from .visit_analysis import PageView, VisitAnalysisInput, analyze_visits
-from .writer import Writer, WriterError
+from .writer import Offline, Writer, WriterError, make_writer
 
 MAX_REVISIONS = 2
 
@@ -70,14 +70,23 @@ class Deps:
 
 def build_research_agent(directory=None, website=None, model=None) -> ResearchAgent:
     """The research agent the pipeline uses. By default it looks practices up in the committed NPI table
-    (`npi.TablePracticeDirectory`), checks homepages over HTTPS, and lets Claude drive the bounded tool loop
-    (needs ANTHROPIC_API_KEY). Any part can be replaced, which is how the tests run offline."""
+    (`npi.TablePracticeDirectory`), checks homepages over HTTPS, and lets research.make_research_model() choose who
+    drives the bounded tool loop: Claude when a credential is set, fixed rules otherwise. Any part can be replaced,
+    which is how the tests run offline."""
     from .npi import TablePracticeDirectory
-    from .research import AnthropicResearchModel, HttpxPracticeWebsite
+    from .research import HttpxPracticeWebsite, make_research_model
 
     return ResearchAgent(directory or TablePracticeDirectory.from_file(),
                          website or HttpxPracticeWebsite(),
-                         model or AnthropicResearchModel())
+                         model or make_research_model())
+
+
+def default_deps(research_agent: Optional[ResearchAgent] = None, writer: Optional[Writer] = None,
+                 sender: Optional[Callable[[dict], None]] = None) -> Deps:
+    """Deps with the real parts: build_research_agent() over the NPI table, the app's writer choice (make_writer)
+    with the template writer as fallback, and no sender, so an approval marks a lead ready but sends nothing."""
+    return Deps(research_agent=research_agent or build_research_agent(), writer=writer or make_writer(),
+                fallback_writer=Offline(), sender=sender)
 
 
 def _trace(step: str, **info: Any) -> list:
@@ -150,10 +159,16 @@ def score(state: LeadState, deps: Deps) -> dict:
 
 
 def _practice_row(state: LeadState) -> dict:
-    """The practice as the writer and checker expect it. A fact research could not find gets a neutral stand-in
-    so the draft reads naturally; the EHR stays None (never guessed) and is simply not mentioned."""
-    facts = state["research"]["facts"]
-    return {"name": state["visit"]["practice_name_raw"], "specialty": facts["specialty"]["value"] or "medical",
+    """The practice as the writer and checker expect it. The name is the directory's record for the matched practice
+    when research returned one, not the visitor's raw hint (which can be lower case, abbreviated or misspelled). A
+    fact research could not find gets a neutral stand-in so the draft reads naturally; the EHR stays None (never
+    guessed) and is simply not mentioned."""
+    research = state["research"]
+    facts = research["facts"]
+    matched = next((c for c in research.get("top_candidates") or [] if c["practice_id"] == research.get("practice_id")),
+                   None)
+    name = matched["name"] if matched else state["visit"]["practice_name_raw"]
+    return {"name": name, "specialty": facts["specialty"]["value"] or "medical",
             "providers": facts["provider_count"]["value"] or 0, "city": facts["location"]["value"] or "your area",
             "ehr": facts["ehr"]["value"], "contact_name": None}
 
@@ -319,7 +334,19 @@ def build_graph(deps: Deps, checkpointer=None):
         graph.add_conditional_edges(name, router, options)
     for name, nxt in FIXED_NEXT.items():
         graph.add_edge(name, target(nxt))
-    return graph.compile(checkpointer=checkpointer or MemorySaver(), interrupt_before=["approval"])
+    return graph.compile(checkpointer=checkpointer or MemorySaver(serde=checkpoint_serializer()),
+                         interrupt_before=["approval"])
+
+
+# The state's own types that a checkpoint stores. Restoring a type it was not told about makes LangGraph log a
+# deprecation warning ("will be blocked in a future version"); registering them is what that warning asks for.
+CHECKPOINT_TYPES = [("leadfinder.visit_analysis", "PageView"), ("leadfinder.visit_analysis", "VisitAnalysisInput")]
+
+
+def checkpoint_serializer():
+    from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
+    return JsonPlusSerializer(allowed_msgpack_modules=CHECKPOINT_TYPES)
 
 
 def _targets_of(name: str) -> list[str]:
@@ -327,3 +354,40 @@ def _targets_of(name: str) -> list[str]:
             "research": ["score", "finish_partial", "finish_review", END],
             "draft": ["check", END], "check": ["approval", "draft", "finish_blocked"],
             "approval": ["send", "check", "draft", "finish_rejected", END]}[name]
+
+
+def demo(practice_hint: Optional[str] = None) -> LeadState:
+    """Run one simulated visit for a real practice in the NPI table through the whole pipeline, with the template
+    writer, and stop at the approval pause. The visit is made up; the practice and its facts are not."""
+    import time
+
+    from . import npi
+
+    records = npi.load_table()
+    target = next((r for r in records if practice_hint and practice_hint.casefold() in r.name.casefold()), None) \
+        or next(r for r in records if r.city == "Ithaca")
+    now = time.time()
+    visit = VisitAnalysisInput(
+        lead_id="demo-1", practice_name_raw=target.name.lower().replace(",", ""), domain_or_org_hint=None,
+        location_hint=target.location, company_identified=True, identification_confidence=0.9,
+        page_views=(PageView("v1", "/pricing", now - 3600, 75), PageView("v2", "/demo", now - 1800, 60)),
+        window_end=now, patient_data_stripped=True)
+    return run_lead({"lead_id": "demo-1", "visit_input": visit}, default_deps(writer=Offline()))
+
+
+if __name__ == "__main__":
+    import json
+    import sys
+
+    result = demo(" ".join(sys.argv[1:]) or None)
+    research_out = result.get("research", {})
+    print(json.dumps({
+        "outcome": result.get("outcome"),
+        "practice_id": research_out.get("practice_id"),
+        "research_status": research_out.get("status"),
+        "facts": research_out.get("facts"),
+        "score": result.get("scoring", {}).get("total"),
+        "draft_subject": result.get("outreach", {}).get("subject"),
+        "steps": [t["step"] for t in result.get("trace", [])],
+        "warnings": result.get("warnings"),
+    }, indent=1))

@@ -9,6 +9,7 @@ from __future__ import annotations
 import difflib
 import ipaddress
 import json
+import os
 import re
 import socket
 from dataclasses import asdict, dataclass, field
@@ -278,6 +279,64 @@ class AnthropicResearchModel:
             if block.type == "tool_use"
         )
         return ModelTurn(calls, tuple(response.content), response.stop_reason)
+
+
+class RulesResearchModel:
+    """The research loop's decisions made by fixed rules instead of Claude, for running without a credential (as
+    writer.Offline is for the writer). It looks the practice up by name and location (or name and domain), falls
+    back to name only when that finds nothing, inspects the top candidate's website when it has a domain, and
+    selects the top candidate only when its confidence clears MATCH_THRESHOLD. ResearchAgent's own safeguards
+    (margin, ambiguity, call cap) still decide the final status, exactly as they do for Claude."""
+
+    name = "rules"
+
+    def next_turn(self, messages: list[dict]) -> ModelTurn:
+        request = json.loads(messages[0]["content"])
+        used, fetched, candidates = set(), set(), []
+        for message in messages[1:]:
+            for block in message["content"] if isinstance(message["content"], list) else ():
+                if block.get("type") == "tool_use" and block["name"] == "practice_lookup":
+                    used.add(block["input"]["strategy"])
+                elif block.get("type") == "tool_use" and block["name"] == "fetch_practice_website":
+                    fetched.add(block["input"]["practice_id"])
+                elif block.get("type") == "tool_result":
+                    try:
+                        result = json.loads(block["content"])
+                    except (TypeError, ValueError):
+                        continue
+                    if "candidates" in result:
+                        candidates = result["candidates"]
+
+        first = "name_domain_location" if request.get("location_hint") or request.get("domain_hint") else "name_only"
+        turn = len(messages)
+        if not used:
+            return self._call(turn, "practice_lookup", strategy=first)
+        if not candidates and "name_only" not in used:
+            return self._call(turn, "practice_lookup", strategy="name_only")
+        top = candidates[0] if candidates else None
+        if top and top.get("domain") and top["practice_id"] not in fetched:
+            return self._call(turn, "fetch_practice_website", practice_id=top["practice_id"])
+        if top and top["confidence"] >= MATCH_THRESHOLD:
+            return self._call(turn, "complete_research", candidate_id=top["practice_id"],
+                              rationale=f"Rules: top candidate by {top['match_reason']} ({top['confidence']}).")
+        return self._call(turn, "complete_research", candidate_id="",
+                          rationale="Rules: no candidate cleared the match threshold.")
+
+    @staticmethod
+    def _call(turn: int, name: str, **arguments) -> ModelTurn:
+        call_id = f"rules-{turn}"
+        block = {"type": "tool_use", "id": call_id, "name": name, "input": arguments}
+        return ModelTurn((AgentToolCall(call_id, name, arguments),), (block,), "tool_use")
+
+
+def make_research_model(kind: Optional[str] = None) -> ToolCallingModel:
+    """`kind`: "claude" or "rules". None reads LEADFINDER_RESEARCH, and failing that picks Claude when a credential
+    is set (ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN) and the rules otherwise, the same choice make_writer makes."""
+    kind = kind or os.environ.get("LEADFINDER_RESEARCH") or (
+        "claude" if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN") else "rules")
+    if kind not in ("claude", "rules"):
+        raise ValueError("LEADFINDER_RESEARCH must be claude or rules")
+    return AnthropicResearchModel() if kind == "claude" else RulesResearchModel()
 
 
 def _domain(value: Optional[str]) -> Optional[str]:
