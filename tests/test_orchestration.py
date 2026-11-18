@@ -111,6 +111,12 @@ def test_sdr_edit_is_rechecked_before_it_can_go_out():
     assert after["outcome"] != "sent"
 
 
+def test_page_visits_count_toward_the_score():
+    """Gate categories must be translated to the scorer's page keys, or visits add no points."""
+    with_visits = run(writer=FakeWriter(GOOD))["scoring"]["reasons"]
+    assert any(r["source"] == "site visits" and r["points"] > 0 and "pricing" in r["label"] for r in with_visits)
+
+
 # ---- guardrail: fake patient strings
 
 def test_unstripped_patient_data_blocks_everything():
