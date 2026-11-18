@@ -108,7 +108,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
     ml.ensure(conn)                     # the trained scorer: fitted on first start (a few seconds), then read from the database
     demo_mode = demo if demo is not None else os.environ.get("LEADFINDER_DEMO", "1") != "0"
     if demo_mode:
-        seed(conn)
+        seed(conn, practices=os.environ.get("LEADFINDER_PRACTICES", "synthetic"))
         auth.seed_demo_accounts(conn)
         seed_demo_review_cases(conn)
     apply_model(conn)                   # leads from before the model, or scored by an older one

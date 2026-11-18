@@ -94,7 +94,7 @@
       </form>
       <form class="draft" method="post" action="/lead/{{ d.id }}/approve">
         <input type="hidden" name="seen" value="{{ token }}">
-        <p class="small muted">To {{ d.contact_name }} &lt;{{ d.contact_email }}&gt;. Edit anything; your edit is what is approved, and the audit log keeps that it was edited.</p>
+        <p class="small muted">To {{ d.contact_name or "the practice" }} {% if d.contact_email %}&lt;{{ d.contact_email }}&gt;{% else %}(no email on record){% endif %}. Edit anything; your edit is what is approved, and the audit log keeps that it was edited.</p>
         <div class="field"><label for="subject">Subject</label><input id="subject" name="subject" value="{{ d.subject }}" maxlength="200" required></div>
         <div class="field"><label for="body">Body</label><textarea id="body" name="body" required>{{ d.body }}</textarea></div>
         {% if problems and not blocked %}<p class="notice warn"><b>The guardrail would stop this.</b> {{ problems|join('; ') }}.</p>{% endif %}
@@ -115,7 +115,7 @@
         <button class="btn" type="submit" data-busy="Rejecting…">Reject</button>
       </form>
       {% elif drafted %}
-      <p class="small muted">To {{ d.contact_name }} &lt;{{ d.contact_email }}&gt;</p>
+      <p class="small muted">To {{ d.contact_name or "the practice" }} {% if d.contact_email %}&lt;{{ d.contact_email }}&gt;{% else %}(no email on record){% endif %}</p>
       <p><b>{{ d.subject }}</b></p>
       <p class="draft-body">{{ d.body }}</p>
       {% else %}
@@ -162,7 +162,7 @@
         <div><dt>Providers</dt><dd class="v num">{{ d.providers }}</dd></div>
         <div><dt>Location</dt><dd class="v">{{ d.city }}, {{ d.state }}</dd></div>
         <div><dt>EHR</dt><dd class="v">{{ d.ehr or 'unknown' }}</dd></div>
-        <div><dt>Contact</dt><dd><span class="v">{{ d.contact_name }}</span><br><span class="src">{{ d.contact_email }} · business address</span></dd></div>
+        <div><dt>Contact</dt><dd><span class="v">{{ d.contact_name or "Not listed" }}</span><br><span class="src">{% if d.contact_email %}{{ d.contact_email }} · business address{% else %}no email on record; the NPI registry lists none{% endif %}</span></dd></div>
       </dl>
     </section>
     <section class="sec">

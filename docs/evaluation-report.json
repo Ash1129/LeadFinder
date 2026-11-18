@@ -124,9 +124,9 @@
   "match_current": {
     "n": 769,
     "outcomes": {
-      "ambiguous_truth_in_top3": 209,
+      "ambiguous_truth_in_top3": 208,
       "correct_match": 518,
-      "ambiguous_truth_missing": 41,
+      "ambiguous_truth_missing": 42,
       "not_found": 1
     },
     "by_noise": {
@@ -146,15 +146,15 @@
         "ambiguous_truth_missing": 12
       },
       "legal_suffix": {
-        "ambiguous_truth_in_top3": 48,
+        "ambiguous_truth_in_top3": 47,
         "correct_match": 78,
-        "not_found": 1,
-        "ambiguous_truth_missing": 1
+        "ambiguous_truth_missing": 2,
+        "not_found": 1
       },
       "no_domain": {
-        "ambiguous_truth_in_top3": 209,
+        "ambiguous_truth_in_top3": 208,
         "correct_match": 7,
-        "ambiguous_truth_missing": 41,
+        "ambiguous_truth_missing": 42,
         "not_found": 1
       },
       "typo": {
@@ -170,9 +170,9 @@
   "match_proposed": {
     "n": 769,
     "outcomes": {
-      "ambiguous_truth_in_top3": 128,
-      "correct_match": 599,
-      "ambiguous_truth_missing": 41,
+      "ambiguous_truth_in_top3": 123,
+      "correct_match": 603,
+      "ambiguous_truth_missing": 42,
       "not_found": 1
     },
     "by_noise": {
@@ -192,15 +192,15 @@
         "ambiguous_truth_missing": 12
       },
       "legal_suffix": {
-        "ambiguous_truth_in_top3": 40,
-        "correct_match": 86,
-        "not_found": 1,
-        "ambiguous_truth_missing": 1
+        "ambiguous_truth_in_top3": 35,
+        "correct_match": 90,
+        "ambiguous_truth_missing": 2,
+        "not_found": 1
       },
       "no_domain": {
-        "ambiguous_truth_in_top3": 128,
-        "correct_match": 88,
-        "ambiguous_truth_missing": 41,
+        "ambiguous_truth_in_top3": 123,
+        "correct_match": 92,
+        "ambiguous_truth_missing": 42,
         "not_found": 1
       },
       "typo": {

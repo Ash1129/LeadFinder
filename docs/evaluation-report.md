@@ -9,7 +9,7 @@ All results are on simulated data. They test whether the modules behave as desig
 1. **Current gate (taxonomy v2)** passes 95.4% of identified visitors whose persona ground truth says they should pass; 0.0% of identified browsers are also passed. The v1-to-v2 taxonomy change reduced browser false passes and fixed catalog URL errors.
 2. **Taxonomy v2 comparison**: identified-visitor recall moves from 95.0% to 95.4%; browser false passes from 15.7% to 0.0%; page-category accuracy from 85.6% to 100.0%. V2 is implemented; its 100% catalog accuracy is not a real-traffic result.
 3. **Identification is the main modeled bottleneck**: 103 of 309 future converters (33.3%) have unresolved identity as their first gate failure in this simulation. Those that otherwise meet the intent rule route to human review; the rest stop. Identification is sampled from assumed persona rates (browser 40%, researcher 70%, ready_to_buy 80%, administrator 65%, owner 70%); these are not measured tracking-tool results. The v2 gate routes 300 of 2000 simulated visitors to human review because they meet the intent rule but lack sufficient identity; there is no persisted review queue. Changing gate thresholds alone cannot supply the missing identity.
-4. **Practice matching never picks the wrong practice** (0 wrong matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never separate two practices with the same name. Lowering the margin to 0.07 raises correct matches from 518 to 599 of 769 with still 0 wrong matches. To be confirmed on real directory data.
+4. **Practice matching never picks the wrong practice** (0 wrong matches), and matches every lead that has a domain. **Without a domain it almost never auto-matches**: the location bonus in `rank_candidates` (+0.08) is smaller than the required margin (0.10), so location can never separate two practices with the same name. Lowering the margin to 0.07 raises correct matches from 518 to 603 of 769 with still 0 wrong matches. To be confirmed on real directory data.
 
 ## 1. Gate: pass rates by persona
 
@@ -71,8 +71,8 @@ Leads that passed the gate (769). Uses `rank_candidates` and the same match/ambi
 | abbreviation | 118 | 61.9% | 0.0% | 21.2% | 16.9% | 0.0% |
 | case | 32 | 68.8% | 0.0% | 28.1% | 3.1% | 0.0% |
 | exact | 342 | 70.2% | 0.0% | 26.3% | 3.5% | 0.0% |
-| legal_suffix | 128 | 60.9% | 0.0% | 37.5% | 0.8% | 0.8% |
-| no_domain | 258 | 2.7% | 0.0% | 81.0% | 15.9% | 0.4% |
+| legal_suffix | 128 | 60.9% | 0.0% | 36.7% | 1.6% | 0.8% |
+| no_domain | 258 | 2.7% | 0.0% | 80.6% | 16.3% | 0.4% |
 | typo | 149 | 70.5% | 0.0% | 24.8% | 4.7% | 0.0% |
 | with_domain | 511 | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
@@ -83,8 +83,8 @@ Leads that passed the gate (769). Uses `rank_candidates` and the same match/ambi
 | abbreviation | 118 | 61.9% | 0.0% | 21.2% | 16.9% | 0.0% |
 | case | 32 | 93.8% | 0.0% | 3.1% | 3.1% | 0.0% |
 | exact | 342 | 82.7% | 0.0% | 13.7% | 3.5% | 0.0% |
-| legal_suffix | 128 | 67.2% | 0.0% | 31.2% | 0.8% | 0.8% |
-| no_domain | 258 | 34.1% | 0.0% | 49.6% | 15.9% | 0.4% |
+| legal_suffix | 128 | 70.3% | 0.0% | 27.3% | 1.6% | 0.8% |
+| no_domain | 258 | 35.7% | 0.0% | 47.7% | 16.3% | 0.4% |
 | typo | 149 | 85.2% | 0.0% | 10.1% | 4.7% | 0.0% |
 | with_domain | 511 | 100.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 
@@ -95,7 +95,7 @@ Caveat: the synthetic directory reuses about 120 names across 400 practices, so 
 | Observed | Change | Effect | Status |
 |---|---|---|---|
 | 15.7% of identified browsers passed the v1 gate via keyword blog/careers URLs | Taxonomy v2 (content sections first, demo/customer URL variants) | browser false-pass 0.0%, should-pass recall 95.0% → 95.4% | Implemented; validate on real URLs |
-| Same-name practices never auto-matched without a domain | Match margin 0.1 → 0.07 | correct matches 518 → 599, wrong matches 0 | Recommended |
+| Same-name practices never auto-matched without a domain | Match margin 0.1 → 0.07 | correct matches 518 → 603, wrong matches 0 | Recommended |
 
 ## Not covered yet
 

@@ -37,9 +37,12 @@ into the app or LangGraph. Do not present this as a live visitor-tracking-to-res
 
 ### Owner handoff
 
-- **Daniel (@Dami047) — data:** implement the `PracticeDirectory` adapter in `research.py`; confirm stable IDs,
-  fields/provenance, matching cutoff, and website-domain quality. The current research match cutoffs are heuristics,
-  not calibrated probabilities.
+- **Daniel (@Dami047) — data:** done in [docs/npi-data.md](./docs/npi-data.md). `src/leadfinder/npi.py` builds a
+  practice table of 742 real independent practices from the NPI registry (`data/npi_practices.json`) and
+  `npi.TablePracticeDirectory` is the `PracticeDirectory` adapter over it. IDs are `npi:<NPI>`; duplicate NPIs of one
+  business are merged; provider counts are estimates; the registry has no domains or EHRs, so neither is filled.
+  Matching on real names (`docs/npi-match-report.md`) supports keeping the 0.85 / 0.10 cutoffs. The table is not yet
+  wired into the app's visit handoff or LangGraph (Mahika); `LEADFINDER_PRACTICES=npi` seeds the demo from it.
 - **Sasha (@Sasha-Shkolnikov) — visit analysis:** deterministic features and gate are in
   `src/leadfinder/visit_analysis.py`; taxonomy v2 handles content sections before slug keywords, common demo
   paths, and customer/specialty pages. The authenticated app endpoint runs the gate, stores scrubbed review cases, and
@@ -115,6 +118,11 @@ paths use the same local visit-attachment and lead-scoring routine. No external 
 occurs, and no new practice is created. The app does not perform input scrubbing; do not send real visit data until
 an approved upstream scrubber and identity source are in place.
 
+To start on real practices from the NPI registry instead of made-up ones, set `LEADFINDER_PRACTICES=npi` on a fresh
+database: 40 practices are drawn from `data/npi_practices.json` (their visits are still simulated, their EHR is
+unknown and they have no email address, since the registry has neither). `python -m leadfinder.npi build` rebuilds
+that table from the public registry; see [docs/npi-data.md](./docs/npi-data.md).
+
 To have Claude write the emails and call briefs, put `ANTHROPIC_API_KEY=...` in a `.env` file beside `asgi.py`
 (it is gitignored; `.env.example` lists every setting) and restart. The tests never call the API.
 
@@ -140,11 +148,14 @@ next version and put it to the scorecard:
 | `src/leadfinder/outreach.py` | the template email and the checks (no patient data, no claims we can't back, the CAN-SPAM footer, nothing off the record) |
 | `src/leadfinder/writer.py` | who writes the email and the call brief: Claude through the Anthropic SDK, or the templates |
 | `src/leadfinder/seed.py` | synthetic practices with valid-format NPIs, and their visits |
+| `src/leadfinder/npi.py` | the data agent: NPI registry client, practice-table builder, entity merge, and `TablePracticeDirectory` |
+| `data/npi_practices.json` | the practice table: real independent practices from the NPI registry, with provenance |
 | `src/leadfinder/research.py` | bounded Claude tool-use research, candidate safeguards, website EHR cues, and the adapter contract |
 | `src/leadfinder/visit_analysis.py` | deterministic page/session features and the versioned pre-research intent gate |
 | `src/leadfinder/service/app.py` | authenticated visit-analysis API and human-review queue integration |
 | `src/leadfinder/service/templates/review_queue.html` and `visit_review.html` | pending review queue and reviewer decision pages |
 | `tests/test_visit_analysis.py` | focused feature, gate, privacy-boundary, and serialization tests |
+| `src/leadfinder/evaluation/npi_match.py` | practice matching on the real NPI table and the cutoff sweep (writes `docs/npi-match-report.md`) |
 | `src/leadfinder/evaluation/` | persona visit simulator with separate ground truth; evaluation of the gate, page taxonomy and practice matching (`python -m leadfinder.evaluation` writes `docs/evaluation-report.md`) |
 | `src/leadfinder/auth.py` | accounts, roles (SDR, sales manager), scrypt passwords, sessions |
 | `src/leadfinder/service/` | the app, the security middleware and headers, the templates, `static/app.js` |
