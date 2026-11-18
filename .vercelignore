@@ -1,7 +1,9 @@
 # What a deployment leaves out: the database is made in /tmp on a cold start (see asgi.py), and docs/ is for people.
 # Anchored with / so a code folder of the same name still goes.
 /.venv
-/data
+/data/*
+# The NPI practice table ships so LEADFINDER_PRACTICES=npi works on a deployment (see docs/npi-data.md).
+!/data/npi_practices.json
 /tests
 /.claude
 /.pytest_cache
