@@ -312,15 +312,38 @@ def _normalized(value: Optional[str]) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (value or "").casefold()).strip()
 
 
+# Legal-form and credential words that registry names carry and visitors' company hints usually drop.
+LEGAL_WORDS = {"pc", "pllc", "llc", "llp", "lp", "pa", "psc", "sc", "inc", "incorporated", "corp", "corporation",
+               "co", "ltd", "md", "mds", "do", "dds", "dpm", "pt", "dpt", "the", "and"}
+
+
+def normalize_name(value: Optional[str]) -> str:
+    """A practice name for comparison: lower case, punctuation removed, split initials joined ('P.C.' -> 'pc'), and
+    legal-form words, 'the' and 'and' dropped, so 'Madison Irving Pediatrics, P.C.' and 'Madison Irving Pediatrics'
+    compare equal and '&' versus 'and' does not count as a difference."""
+    joined: list[str] = []
+    in_initials = False
+    for word in _normalized(value).split():
+        initial = len(word) == 1 and word.isalpha()
+        if initial and in_initials:
+            joined[-1] += word      # a run of single letters is one word: 'p c' -> 'pc', 'l l c' -> 'llc'
+        else:
+            joined.append(word)
+        in_initials = initial
+    kept = [word for word in joined if word not in LEGAL_WORDS]
+    return " ".join(kept or joined)
+
+
 def rank_candidates(request: ResearchRequest, candidates: Sequence[PracticeCandidate]) -> tuple[CandidateMatch, ...]:
-    """Rank candidates with transparent name/domain/location evidence; confidence is a heuristic, not a probability."""
+    """Rank candidates with transparent name/domain/location evidence; confidence is a heuristic, not a probability.
+    Names are compared after `normalize_name`, so legal suffixes and '&'/'and' do not lower the score."""
     wanted_domain = _domain(request.domain_hint)
-    wanted_name = _normalized(request.practice_name)
+    wanted_name = normalize_name(request.practice_name)
     wanted_location = _normalized(request.location_hint)
     ranked = []
     for candidate in candidates:
         candidate_domain = _domain(candidate.domain)
-        candidate_name = _normalized(candidate.name)
+        candidate_name = normalize_name(candidate.name)
         candidate_location = _normalized(candidate.location)
         name_score = difflib.SequenceMatcher(None, wanted_name, candidate_name).ratio()
         location_match = bool(wanted_location and candidate_location and

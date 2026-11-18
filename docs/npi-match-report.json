@@ -1,0 +1,1043 @@
+{
+ "seed": 42,
+ "practices": 742,
+ "v1": {
+  "threshold": 0.85,
+  "margin": 0.1,
+  "positives": 4152,
+  "negatives": 1784,
+  "correct_rate": 0.6305394990366089,
+  "wrong_match_rate": 0.0,
+  "false_match_rate": 0.01289237668161435,
+  "false_match_different_rate": 0.010650224215246636,
+  "positive_outcomes": {
+   "correct": 2618,
+   "ambiguous_truth_in_top3": 1515,
+   "not_found": 9,
+   "ambiguous_truth_missing": 10
+  },
+  "negative_outcomes": {
+   "not_found": 402,
+   "ambiguous": 1359,
+   "false_match": 23
+  },
+  "false_match_kinds": {
+   "different_practice": 19,
+   "same_name_other_site": 4
+  },
+  "by_variant": {
+   "casual": {
+    "ambiguous_truth_in_top3": 145,
+    "correct": 373,
+    "not_found": 1
+   },
+   "casual (no location)": {
+    "ambiguous_truth_in_top3": 373,
+    "correct": 140,
+    "not_found": 2,
+    "ambiguous_truth_missing": 4
+   },
+   "no_legal_suffix": {
+    "ambiguous_truth_in_top3": 84,
+    "correct": 434,
+    "not_found": 1
+   },
+   "no_legal_suffix (no location)": {
+    "ambiguous_truth_in_top3": 333,
+    "correct": 182,
+    "not_found": 2,
+    "ambiguous_truth_missing": 2
+   },
+   "registry_name": {
+    "correct": 517,
+    "ambiguous_truth_in_top3": 2
+   },
+   "registry_name (no location)": {
+    "correct": 498,
+    "ambiguous_truth_in_top3": 19,
+    "ambiguous_truth_missing": 2
+   },
+   "typo": {
+    "ambiguous_truth_in_top3": 148,
+    "correct": 370,
+    "not_found": 1
+   },
+   "typo (no location)": {
+    "ambiguous_truth_in_top3": 411,
+    "correct": 104,
+    "not_found": 2,
+    "ambiguous_truth_missing": 2
+   }
+  }
+ },
+ "v2": {
+  "threshold": 0.85,
+  "margin": 0.1,
+  "positives": 4152,
+  "negatives": 1784,
+  "correct_rate": 0.9154624277456648,
+  "wrong_match_rate": 0.0,
+  "false_match_rate": 0.023542600896860985,
+  "false_match_different_rate": 0.013452914798206279,
+  "positive_outcomes": {
+   "correct": 3801,
+   "ambiguous_truth_in_top3": 337,
+   "ambiguous_truth_missing": 14
+  },
+  "negative_outcomes": {
+   "ambiguous": 1355,
+   "not_found": 387,
+   "false_match": 42
+  },
+  "false_match_kinds": {
+   "same_name_other_site": 18,
+   "different_practice": 24
+  },
+  "by_variant": {
+   "casual": {
+    "correct": 470,
+    "ambiguous_truth_in_top3": 49
+   },
+   "casual (no location)": {
+    "correct": 425,
+    "ambiguous_truth_in_top3": 89,
+    "ambiguous_truth_missing": 5
+   },
+   "no_legal_suffix": {
+    "correct": 517,
+    "ambiguous_truth_in_top3": 2
+   },
+   "no_legal_suffix (no location)": {
+    "correct": 498,
+    "ambiguous_truth_in_top3": 18,
+    "ambiguous_truth_missing": 3
+   },
+   "registry_name": {
+    "correct": 517,
+    "ambiguous_truth_in_top3": 2
+   },
+   "registry_name (no location)": {
+    "correct": 498,
+    "ambiguous_truth_in_top3": 18,
+    "ambiguous_truth_missing": 3
+   },
+   "typo": {
+    "correct": 515,
+    "ambiguous_truth_in_top3": 4
+   },
+   "typo (no location)": {
+    "correct": 361,
+    "ambiguous_truth_in_top3": 155,
+    "ambiguous_truth_missing": 3
+   }
+  }
+ },
+ "sweep": [
+  {
+   "threshold": 0.75,
+   "margin": 0.05,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9655587668593449,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.08464125560538116,
+   "false_match_different_rate": 0.0734304932735426,
+   "positive_outcomes": {
+    "correct": 4009,
+    "ambiguous_truth_in_top3": 129,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1246,
+    "not_found": 387,
+    "false_match": 151
+   },
+   "false_match_kinds": {
+    "different_practice": 131,
+    "same_name_other_site": 20
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 505,
+     "ambiguous_truth_in_top3": 14
+    },
+    "casual (no location)": {
+     "correct": 457,
+     "ambiguous_truth_in_top3": 57,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "typo (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.75,
+   "margin": 0.1,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.960019267822736,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.06053811659192825,
+   "false_match_different_rate": 0.04988789237668161,
+   "positive_outcomes": {
+    "correct": 3986,
+    "ambiguous_truth_in_top3": 152,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1289,
+    "not_found": 387,
+    "false_match": 108
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 19,
+    "different_practice": 89
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 500,
+     "ambiguous_truth_in_top3": 19
+    },
+    "casual (no location)": {
+     "correct": 450,
+     "ambiguous_truth_in_top3": 64,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "typo (no location)": {
+     "correct": 489,
+     "ambiguous_truth_in_top3": 27,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.75,
+   "margin": 0.15,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9277456647398844,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.043161434977578475,
+   "false_match_different_rate": 0.034753363228699555,
+   "positive_outcomes": {
+    "correct": 3852,
+    "ambiguous_truth_in_top3": 286,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1320,
+    "not_found": 387,
+    "false_match": 77
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 15,
+    "different_practice": 62
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 493,
+     "ambiguous_truth_in_top3": 26
+    },
+    "casual (no location)": {
+     "correct": 423,
+     "ambiguous_truth_in_top3": 91,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "registry_name (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 510,
+     "ambiguous_truth_in_top3": 9
+    },
+    "typo (no location)": {
+     "correct": 462,
+     "ambiguous_truth_in_top3": 54,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.8,
+   "margin": 0.05,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9576107899807321,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.05829596412556054,
+   "false_match_different_rate": 0.04708520179372197,
+   "positive_outcomes": {
+    "correct": 3976,
+    "ambiguous_truth_in_top3": 162,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1293,
+    "not_found": 387,
+    "false_match": 104
+   },
+   "false_match_kinds": {
+    "different_practice": 84,
+    "same_name_other_site": 20
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 494,
+     "ambiguous_truth_in_top3": 25
+    },
+    "casual (no location)": {
+     "correct": 439,
+     "ambiguous_truth_in_top3": 75,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "typo (no location)": {
+     "correct": 494,
+     "ambiguous_truth_in_top3": 22,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.8,
+   "margin": 0.1,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9535163776493256,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.04652466367713005,
+   "false_match_different_rate": 0.03587443946188341,
+   "positive_outcomes": {
+    "correct": 3959,
+    "ambiguous_truth_in_top3": 179,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1314,
+    "not_found": 387,
+    "false_match": 83
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 19,
+    "different_practice": 64
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 490,
+     "ambiguous_truth_in_top3": 29
+    },
+    "casual (no location)": {
+     "correct": 437,
+     "ambiguous_truth_in_top3": 77,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "typo (no location)": {
+     "correct": 485,
+     "ambiguous_truth_in_top3": 31,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.8,
+   "margin": 0.15,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9219653179190751,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.032511210762331835,
+   "false_match_different_rate": 0.024103139013452915,
+   "positive_outcomes": {
+    "correct": 3828,
+    "ambiguous_truth_in_top3": 310,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1339,
+    "not_found": 387,
+    "false_match": 58
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 15,
+    "different_practice": 43
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 484,
+     "ambiguous_truth_in_top3": 35
+    },
+    "casual (no location)": {
+     "correct": 412,
+     "ambiguous_truth_in_top3": 102,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "registry_name (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 510,
+     "ambiguous_truth_in_top3": 9
+    },
+    "typo (no location)": {
+     "correct": 458,
+     "ambiguous_truth_in_top3": 58,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.85,
+   "margin": 0.05,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9183526011560693,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.02858744394618834,
+   "false_match_different_rate": 0.018497757847533634,
+   "positive_outcomes": {
+    "correct": 3813,
+    "ambiguous_truth_in_top3": 325,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1346,
+    "not_found": 387,
+    "false_match": 51
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 18,
+    "different_practice": 33
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 470,
+     "ambiguous_truth_in_top3": 49
+    },
+    "casual (no location)": {
+     "correct": 426,
+     "ambiguous_truth_in_top3": 88,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "typo (no location)": {
+     "correct": 370,
+     "ambiguous_truth_in_top3": 146,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.85,
+   "margin": 0.1,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.9154624277456648,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.023542600896860985,
+   "false_match_different_rate": 0.013452914798206279,
+   "positive_outcomes": {
+    "correct": 3801,
+    "ambiguous_truth_in_top3": 337,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1355,
+    "not_found": 387,
+    "false_match": 42
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 18,
+    "different_practice": 24
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 470,
+     "ambiguous_truth_in_top3": 49
+    },
+    "casual (no location)": {
+     "correct": 425,
+     "ambiguous_truth_in_top3": 89,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "typo (no location)": {
+     "correct": 361,
+     "ambiguous_truth_in_top3": 155,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.85,
+   "margin": 0.15,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.8848747591522158,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.020739910313901346,
+   "false_match_different_rate": 0.01289237668161435,
+   "positive_outcomes": {
+    "correct": 3674,
+    "ambiguous_truth_in_top3": 464,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1360,
+    "not_found": 387,
+    "false_match": 37
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 14,
+    "different_practice": 23
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 52
+    },
+    "casual (no location)": {
+     "correct": 401,
+     "ambiguous_truth_in_top3": 113,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "registry_name (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 508,
+     "ambiguous_truth_in_top3": 11
+    },
+    "typo (no location)": {
+     "correct": 334,
+     "ambiguous_truth_in_top3": 182,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.9,
+   "margin": 0.05,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.8239402697495183,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.015134529147982063,
+   "false_match_different_rate": 0.0072869955156950675,
+   "positive_outcomes": {
+    "correct": 3421,
+    "ambiguous_truth_in_top3": 717,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1370,
+    "not_found": 387,
+    "false_match": 27
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 14,
+    "different_practice": 13
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 444,
+     "ambiguous_truth_in_top3": 75
+    },
+    "casual (no location)": {
+     "correct": 426,
+     "ambiguous_truth_in_top3": 88,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 499,
+     "ambiguous_truth_in_top3": 17,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 491,
+     "ambiguous_truth_in_top3": 28
+    },
+    "typo (no location)": {
+     "ambiguous_truth_in_top3": 488,
+     "correct": 28,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.9,
+   "margin": 0.1,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.8232177263969171,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.015134529147982063,
+   "false_match_different_rate": 0.0072869955156950675,
+   "positive_outcomes": {
+    "correct": 3418,
+    "ambiguous_truth_in_top3": 720,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1370,
+    "not_found": 387,
+    "false_match": 27
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 14,
+    "different_practice": 13
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 444,
+     "ambiguous_truth_in_top3": 75
+    },
+    "casual (no location)": {
+     "correct": 425,
+     "ambiguous_truth_in_top3": 89,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "correct": 498,
+     "ambiguous_truth_in_top3": 18,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 491,
+     "ambiguous_truth_in_top3": 28
+    },
+    "typo (no location)": {
+     "ambiguous_truth_in_top3": 488,
+     "correct": 28,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.9,
+   "margin": 0.15,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.799373795761079,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.013452914798206279,
+   "false_match_different_rate": 0.0072869955156950675,
+   "positive_outcomes": {
+    "correct": 3319,
+    "ambiguous_truth_in_top3": 819,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1373,
+    "not_found": 387,
+    "false_match": 24
+   },
+   "false_match_kinds": {
+    "same_name_other_site": 11,
+    "different_practice": 13
+   },
+   "by_variant": {
+    "casual": {
+     "correct": 442,
+     "ambiguous_truth_in_top3": 77
+    },
+    "casual (no location)": {
+     "correct": 401,
+     "ambiguous_truth_in_top3": 113,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "no_legal_suffix (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "registry_name (no location)": {
+     "correct": 467,
+     "ambiguous_truth_in_top3": 49,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "correct": 484,
+     "ambiguous_truth_in_top3": 35
+    },
+    "typo (no location)": {
+     "ambiguous_truth_in_top3": 488,
+     "correct": 28,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.95,
+   "margin": 0.05,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.39234104046242774,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.0,
+   "false_match_different_rate": 0.0,
+   "positive_outcomes": {
+    "correct": 1629,
+    "ambiguous_truth_in_top3": 2509,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1397,
+    "not_found": 387
+   },
+   "false_match_kinds": {},
+   "by_variant": {
+    "casual": {
+     "correct": 440,
+     "ambiguous_truth_in_top3": 79
+    },
+    "casual (no location)": {
+     "ambiguous_truth_in_top3": 514,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "ambiguous_truth_in_top3": 364,
+     "correct": 155
+    },
+    "typo (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.95,
+   "margin": 0.1,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.39234104046242774,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.0,
+   "false_match_different_rate": 0.0,
+   "positive_outcomes": {
+    "correct": 1629,
+    "ambiguous_truth_in_top3": 2509,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1397,
+    "not_found": 387
+   },
+   "false_match_kinds": {},
+   "by_variant": {
+    "casual": {
+     "correct": 440,
+     "ambiguous_truth_in_top3": 79
+    },
+    "casual (no location)": {
+     "ambiguous_truth_in_top3": 514,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "no_legal_suffix (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 517,
+     "ambiguous_truth_in_top3": 2
+    },
+    "registry_name (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "ambiguous_truth_in_top3": 364,
+     "correct": 155
+    },
+    "typo (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  },
+  {
+   "threshold": 0.95,
+   "margin": 0.15,
+   "positives": 4152,
+   "negatives": 1784,
+   "correct_rate": 0.39041425818882464,
+   "wrong_match_rate": 0.0,
+   "false_match_rate": 0.0,
+   "false_match_different_rate": 0.0,
+   "positive_outcomes": {
+    "correct": 1621,
+    "ambiguous_truth_in_top3": 2517,
+    "ambiguous_truth_missing": 14
+   },
+   "negative_outcomes": {
+    "ambiguous": 1397,
+    "not_found": 387
+   },
+   "false_match_kinds": {},
+   "by_variant": {
+    "casual": {
+     "correct": 438,
+     "ambiguous_truth_in_top3": 81
+    },
+    "casual (no location)": {
+     "ambiguous_truth_in_top3": 514,
+     "ambiguous_truth_missing": 5
+    },
+    "no_legal_suffix": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "no_legal_suffix (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    },
+    "registry_name": {
+     "correct": 515,
+     "ambiguous_truth_in_top3": 4
+    },
+    "registry_name (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    },
+    "typo": {
+     "ambiguous_truth_in_top3": 366,
+     "correct": 153
+    },
+    "typo (no location)": {
+     "ambiguous_truth_in_top3": 516,
+     "ambiguous_truth_missing": 3
+    }
+   }
+  }
+ ]
+}

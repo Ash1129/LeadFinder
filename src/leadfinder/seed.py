@@ -59,13 +59,21 @@ def _npi(rng: random.Random) -> str:
     return first9 + str(npi_check_digit(first9))
 
 
-def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None = None) -> dict:
+def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None = None,
+         practices: str = "synthetic") -> dict:
     """Fill an empty database with `n` practices, their visits over the last three weeks, and a scored lead with a
-    call brief for each (no email: that is written on request). Returns counts. Does nothing if practices exist already."""
+    call brief for each (no email: that is written on request). Returns counts. Does nothing if practices exist already.
+
+    `practices="npi"` takes the practices from the real NPI table (data/npi_practices.json, see npi.py) instead of
+    making them up; their visits are still simulated, since there is no tracking connector."""
     if conn.execute("SELECT COUNT(*) n FROM practices").fetchone()["n"]:
         return {"practices": 0, "visits": 0, "leads": 0}
+    if practices not in ("synthetic", "npi"):
+        raise ValueError("practices must be 'synthetic' or 'npi'")
     rng = random.Random(seed)
     now = time.time() if now is None else now
+    if practices == "npi":
+        return _seed_npi(conn, rng, n, now)
     names, visits_made = set(), 0
     for _ in range(n):
         p = synth.practice(rng)
@@ -87,6 +95,27 @@ def seed(conn: sqlite3.Connection, n: int = 40, seed: int = 7, now: float | None
     leads = score_all(conn, now=now)
     apply_model(conn, now=now)
     return {"practices": n, "visits": visits_made, "leads": leads}
+
+
+def _seed_npi(conn: sqlite3.Connection, rng: random.Random, n: int, now: float) -> dict:
+    """`n` practices drawn (seeded) from the NPI table, with simulated visits. EHR stays unknown and there is no
+    contact email: the registry has neither, and neither is invented."""
+    from . import npi              # npi imports this module for valid_npi; import it only when it is needed
+
+    records = sorted(npi.load_table(), key=lambda r: r.npi)
+    visits_made = 0
+    for record in rng.sample(records, min(n, len(records))):
+        cur = conn.execute("INSERT INTO practices(npi, name, specialty, providers, city, state, ehr, contact_name, "
+                           "contact_email, source) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                           (record.npi, record.name, record.specialty, record.providers, record.city, record.state,
+                            None, record.contact_name, None, "npi"))
+        for page, at in synth.visits(rng, now):
+            conn.execute("INSERT INTO visits(practice_id, page, at) VALUES(?,?,?)", (cur.lastrowid, page, at))
+            visits_made += 1
+    made = conn.execute("SELECT COUNT(*) n FROM practices").fetchone()["n"]
+    leads = score_all(conn, now=now)
+    apply_model(conn, now=now)
+    return {"practices": made, "visits": visits_made, "leads": leads}
 
 
 def process_local_visit_handoff(
