@@ -1,8 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 500" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="LeadFinder workflow for one lead">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 524" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="LeadFinder workflow for one lead">
   <defs>
     <marker id="w" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5E5B55"/></marker>
   </defs>
-  <rect width="1120" height="500" fill="#FFFFFF"/>
+  <rect width="1120" height="524" fill="#FFFFFF"/>
   <text x="24" y="36" font-size="19" font-weight="700" fill="#201F1D">One lead, one fixed path: AI only where judgment is needed</text>
   <text x="24" y="58" font-size="13" fill="#5E5B55">Nine steps in a fixed order. Code decides what comes next, never an LLM supervisor.</text>
 
@@ -74,13 +74,14 @@
 
   <text x="24" y="398" font-size="13" fill="#201F1D">Loops are bounded: research stops at 10 tool calls; a flagged draft is redrafted at most twice, then goes to a person.</text>
   <text x="24" y="420" font-size="13" fill="#201F1D">No answer from the SDR leaves the lead paused. Nothing is sent without an approval.</text>
+  <text x="24" y="442" font-size="13" fill="#201F1D">Before any lead arrives, the data agent (code, offline) builds the NPI practice table that step 4 searches and step 5 scores.</text>
 
   <g font-size="12" fill="#201F1D">
-    <rect x="24" y="456" width="16" height="16" rx="3" fill="#EDECE8" stroke="#5E5B55"/><text x="46" y="469">Code / rules</text>
-    <rect x="150" y="456" width="16" height="16" rx="3" fill="#201F1D"/><text x="172" y="469">Trained ML model</text>
-    <rect x="304" y="456" width="16" height="16" rx="3" fill="#F6EBD9" stroke="#B68235" stroke-width="1.5"/><text x="326" y="469">Claude (LLM)</text>
-    <rect x="432" y="456" width="16" height="16" rx="3" fill="#E0EEE3" stroke="#2D6A3E" stroke-width="1.5"/><text x="454" y="469">Person</text>
-    <rect x="540" y="456" width="16" height="16" rx="3" fill="none" stroke="#5E5B55" stroke-dasharray="4 3"/><text x="562" y="469">Dashed: built, not wired</text>
-    <rect x="730" y="456" width="16" height="16" rx="3" fill="none" stroke="#5E5B55" stroke-dasharray="1 3"/><text x="752" y="469">Dotted: planned</text>
+    <rect x="24" y="480" width="16" height="16" rx="3" fill="#EDECE8" stroke="#5E5B55"/><text x="46" y="493">Code / rules</text>
+    <rect x="150" y="480" width="16" height="16" rx="3" fill="#201F1D"/><text x="172" y="493">Trained ML model</text>
+    <rect x="304" y="480" width="16" height="16" rx="3" fill="#F6EBD9" stroke="#B68235" stroke-width="1.5"/><text x="326" y="493">Claude (LLM)</text>
+    <rect x="432" y="480" width="16" height="16" rx="3" fill="#E0EEE3" stroke="#2D6A3E" stroke-width="1.5"/><text x="454" y="493">Person</text>
+    <rect x="540" y="480" width="16" height="16" rx="3" fill="none" stroke="#5E5B55" stroke-dasharray="4 3"/><text x="562" y="493">Dashed: built, not wired</text>
+    <rect x="730" y="480" width="16" height="16" rx="3" fill="none" stroke="#5E5B55" stroke-dasharray="1 3"/><text x="752" y="493">Dotted: planned</text>
   </g>
 </svg>
