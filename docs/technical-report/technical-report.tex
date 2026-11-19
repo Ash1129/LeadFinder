@@ -52,7 +52,7 @@
 {\LARGE\bfseries LeadFinder}\\[6pt]
 {\large An AI lead finder for health-tech sales to independent medical practices}\\[12pt]
 Daniel Akinwale \quad Mahika Arora \quad Hanna Malet\\ Gabriel Maurad \quad Ashwin Prajeeth \quad Sasha Shkolnikov\\[4pt]
-{\small November 2026 \quad\textbullet\quad Live demo: \href{https://leadfinder-mauve.vercel.app}{leadfinder-mauve.vercel.app}}\\{\small SDR logins \code{riley} and \code{jo}, sales manager \code{morgan}; the password is on the login page}
+{\small November 2026 \quad\textbullet\quad Live demo: \href{https://leadfinder-mauve.vercel.app}{leadfinder-mauve.vercel.app}}\\{\small SDR logins \code{riley} and \code{jo}, sales manager \code{morgan}; the password is on the login page}\\[6pt]{\small\itshape Written by Claude (Anthropic) from the team's inputs and information; see the AI attribution on page~\pageref{sec:ai-attribution}.}
 \end{center}
 \vspace{4pt}
 
@@ -292,7 +292,7 @@ Several further pieces are designed but not built, and each follows the architec
 
 LeadFinder shows that most of a sales-prospecting pipeline does not need an LLM, and that the parts that do are safer when they are bounded and checked by code. The gate, the matching safeguards, the draft checks and the orchestration are plain rules; a transparent logistic regression ranks the leads with a 2.72$\times$ lift and honest chances on simulated data; Claude is used where language and judgment matter, writing on request and researching under a ten-call cap; and a person decides every email. Testing changed the design three times, each time in a way that reasoning alone would not have found. Assuming the next goal is evidence that the system works on real sales, the work that matters most is not a better model but real inputs: a scrubbed visit feed, the research path wired into the app, and SDR decisions flowing back as labels, so that the comparison with an LLM's judgment can finally be run on outcomes that are not our own.
 
-\section*{AI attribution}
+\section*{AI attribution}\label{sec:ai-attribution}
 
 This report was written by Claude (Anthropic's Claude Opus 5.5, through Claude Code), including its prose, tables, diagrams and charts, and the demo screenshots were captured by Claude from a local run of the application. It is based on the team's own inputs and information: the project's code and commit history, the evaluation and matching reports, the proposal and brainstorm documents, the course rubric, and the team's presentation deck. Some of that source material was itself produced with Claude earlier in the project, most notably the final presentation deck and parts of the project documentation, so in those places the report restates content that originated with the AI rather than independently with the team. Figures and results were checked against the running application, the test suite and the generated evaluation reports, and the team remains responsible for the accuracy of the final submission.
 
