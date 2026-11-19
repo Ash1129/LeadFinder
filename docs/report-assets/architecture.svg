@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 760" font-family="Helvetica, Arial, sans-serif" role="img" aria-label="LeadFinder architecture">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5E5B55"/></marker>
+  </defs>
+  <rect width="1120" height="760" fill="#FFFFFF"/>
+  <text x="24" y="36" font-size="19" font-weight="700" fill="#201F1D">LeadFinder architecture: one FastAPI service, with the agentic research path built beside it</text>
+  <text x="24" y="58" font-size="13" fill="#5E5B55">Solid borders run in the deployed app today; dashed borders are built and tested but not yet called by the app; dotted is planned.</text>
+
+  <!-- INPUTS column -->
+  <text x="24" y="96" font-size="12" font-weight="700" fill="#5E5B55" letter-spacing="1">INPUTS AND PEOPLE</text>
+  <rect x="24" y="110" width="220" height="84" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="38" y="134" font-size="14" font-weight="700" fill="#201F1D">Website visits</text>
+  <text x="38" y="154" font-size="12" fill="#201F1D">pages, sessions, recency,</text>
+  <text x="38" y="170" font-size="12" fill="#201F1D">company hint</text>
+  <text x="38" y="186" font-size="11" fill="#5E5B55">simulated from 5 personas</text>
+
+  <rect x="24" y="210" width="220" height="34" rx="8" fill="#F3F2F0" stroke="#E3E1DC"/>
+  <text x="38" y="232" font-size="12" fill="#201F1D">Public NPI registry (NPPES API)</text>
+  <rect x="24" y="262" width="220" height="104" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="38" y="286" font-size="14" font-weight="700" fill="#201F1D">Practice table builder (code)</text>
+  <text x="38" y="306" font-size="12" fill="#201F1D">builds the practice table:</text>
+  <text x="38" y="322" font-size="12" fill="#201F1D">742 independent practices,</text>
+  <text x="38" y="338" font-size="12" fill="#201F1D">duplicates merged, sizes estimated</text>
+  <text x="38" y="356" font-size="11" fill="#5E5B55">no EHR or domain: never guessed</text>
+  <text x="24" y="384" font-size="10.5" fill="#5E5B55">Seeds the demo; directory for the research agent</text>
+
+  <rect x="24" y="414" width="220" height="72" rx="8" fill="#F6EBD9" stroke="#B68235" stroke-width="1.5"/>
+  <text x="38" y="438" font-size="14" font-weight="700" fill="#201F1D">Anthropic API</text>
+  <text x="38" y="458" font-size="12" fill="#201F1D">claude-opus-5-5</text>
+  <text x="38" y="476" font-size="11" fill="#5E5B55">sees public business facts only</text>
+
+  <rect x="24" y="566" width="220" height="72" rx="8" fill="#E0EEE3" stroke="#2D6A3E" stroke-width="1.5"/>
+  <text x="38" y="590" font-size="14" font-weight="700" fill="#201F1D">SDRs, sales manager</text>
+  <text x="38" y="610" font-size="12" fill="#201F1D">browser, staff login, roles</text>
+  <text x="38" y="628" font-size="11" fill="#5E5B55">review queue, approve, audit</text>
+
+  <!-- APP container -->
+  <rect x="280" y="80" width="500" height="630" rx="10" fill="none" stroke="#201F1D" stroke-width="1.5"/>
+  <text x="296" y="100" font-size="12" font-weight="700" fill="#201F1D" letter-spacing="1">FASTAPI SERVICE · SQLITE · DEPLOYED ON VERCEL</text>
+
+  <rect x="300" y="112" width="460" height="56" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="314" y="135" font-size="14" font-weight="700" fill="#201F1D">Intent gate (code)</text>
+  <text x="314" y="155" font-size="12" fill="#201F1D">POST /api/visit-analysis · page tiers, sessions, evaluation criteria</text>
+
+  <rect x="300" y="188" width="220" height="56" rx="8" fill="#E0EEE3" stroke="#2D6A3E" stroke-width="1.5"/>
+  <text x="314" y="211" font-size="14" font-weight="700" fill="#201F1D">Visit review queue (SDR)</text>
+  <text x="314" y="231" font-size="12" fill="#201F1D">high intent, practice unknown</text>
+  <rect x="540" y="188" width="220" height="56" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="554" y="211" font-size="14" font-weight="700" fill="#201F1D">Exact local match (code)</text>
+  <text x="554" y="231" font-size="12" fill="#201F1D">unique name + location</text>
+
+  <rect x="300" y="264" width="460" height="56" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="314" y="287" font-size="14" font-weight="700" fill="#201F1D">Local visit handoff (code)</text>
+  <text x="314" y="307" font-size="12" fill="#201F1D">attaches page categories to the practice, creates or rescores the lead</text>
+
+  <rect x="300" y="340" width="220" height="60" rx="8" fill="#201F1D" stroke="#201F1D"/>
+  <text x="314" y="364" font-size="14" font-weight="700" fill="#FFFFFF">Logistic regression (ML)</text>
+  <text x="314" y="385" font-size="12" fill="#E3E1DC">21 facts → chance + reasons</text>
+  <rect x="540" y="340" width="220" height="60" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="554" y="364" font-size="14" font-weight="700" fill="#201F1D">Points table (code)</text>
+  <text x="554" y="385" font-size="12" fill="#201F1D">hand-set, shown beside it</text>
+
+  <rect x="300" y="422" width="460" height="56" rx="8" fill="#F6EBD9" stroke="#B68235" stroke-width="1.5"/>
+  <text x="314" y="445" font-size="14" font-weight="700" fill="#201F1D">Writer: Claude, or a template without a key</text>
+  <text x="314" y="465" font-size="12" fill="#201F1D">first email and call brief, only when the SDR presses the button</text>
+
+  <rect x="300" y="498" width="460" height="56" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="314" y="521" font-size="14" font-weight="700" fill="#201F1D">Draft checks (code)</text>
+  <text x="314" y="541" font-size="12" fill="#201F1D">no patient data, no unbacked claims, nothing off the record, CAN-SPAM footer</text>
+
+  <rect x="300" y="574" width="220" height="56" rx="8" fill="#E0EEE3" stroke="#2D6A3E" stroke-width="1.5"/>
+  <text x="314" y="597" font-size="14" font-weight="700" fill="#201F1D">Approve / reject (SDR)</text>
+  <text x="314" y="617" font-size="12" fill="#201F1D">edit first; every decision logged</text>
+  <rect x="540" y="574" width="220" height="56" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
+  <text x="554" y="597" font-size="14" font-weight="700" fill="#201F1D">Send (code)</text>
+  <text x="554" y="617" font-size="12" fill="#201F1D">SMTP, to a test mailbox only</text>
+
+  <rect x="300" y="650" width="460" height="44" rx="8" fill="#F3F2F0" stroke="#E3E1DC"/>
+  <text x="314" y="677" font-size="12" fill="#201F1D"><tspan font-weight="700">SQLite:</tspan> practices, visits, leads, review cases, model versions, audit log</text>
+
+  <!-- arrows inside app -->
+  <g fill="none" stroke="#5E5B55" stroke-width="1.3">
+    <path d="M410 168V188" marker-end="url(#a)"/>
+    <path d="M650 168V188" marker-end="url(#a)"/>
+    <path d="M410 244V264" marker-end="url(#a)"/>
+    <path d="M650 244V264" marker-end="url(#a)"/>
+    <path d="M410 320V340" marker-end="url(#a)"/>
+    <path d="M650 320V340" marker-end="url(#a)"/>
+    <path d="M410 400V422" marker-end="url(#a)"/>
+    <path d="M530 478V498" marker-end="url(#a)"/>
+    <path d="M410 554V574" marker-end="url(#a)"/>
+    <path d="M520 602H540" marker-end="url(#a)"/>
+    <!-- inputs to app -->
+    <path d="M244 140H300" marker-end="url(#a)"/>
+    <path d="M134 244V262" marker-end="url(#a)"/>
+    <path d="M244 300H262V292H300" marker-end="url(#a)"/>
+    <path d="M244 450H300" marker-end="url(#a)"/>
+    <path d="M244 602H300" marker-end="url(#a)"/>
+  </g>
+  
+
+  <!-- RIGHT container: built, not wired -->
+  <rect x="816" y="80" width="280" height="440" rx="10" fill="none" stroke="#5E5B55" stroke-width="1.5" stroke-dasharray="6 5"/>
+  <text x="832" y="100" font-size="12" font-weight="700" fill="#5E5B55" letter-spacing="1">BUILT, NOT YET IN THE APP</text>
+
+  <rect x="836" y="114" width="240" height="66" rx="8" fill="#EDECE8" stroke="#5E5B55" stroke-dasharray="5 4"/>
+  <text x="850" y="138" font-size="14" font-weight="700" fill="#201F1D">LangGraph orchestration</text>
+  <text x="850" y="157" font-size="12" fill="#201F1D">fixed graph, code picks the next</text>
+  <text x="850" y="172" font-size="12" fill="#201F1D">step · 7 end states per lead</text>
+
+  <rect x="836" y="204" width="240" height="66" rx="8" fill="#F6EBD9" stroke="#B68235" stroke-width="1.5" stroke-dasharray="5 4"/>
+  <text x="850" y="228" font-size="14" font-weight="700" fill="#201F1D">ResearchAgent (Claude)</text>
+  <text x="850" y="247" font-size="12" fill="#201F1D">bounded tool loop</text>
+  <text x="850" y="262" font-size="12" fill="#201F1D">at most 10 tool calls</text>
+
+  <rect x="836" y="294" width="114" height="66" rx="8" fill="#EDECE8" stroke="#5E5B55" stroke-dasharray="5 4"/>
+  <text x="846" y="317" font-size="13" font-weight="700" fill="#201F1D">Directory</text>
+  <text x="846" y="335" font-size="11" fill="#201F1D">lookup tool</text>
+  <text x="846" y="351" font-size="11" fill="#5E5B55">NPI practice table</text>
+  <rect x="962" y="294" width="114" height="66" rx="8" fill="#EDECE8" stroke="#5E5B55" stroke-dasharray="5 4"/>
+  <text x="972" y="317" font-size="13" font-weight="700" fill="#201F1D">Homepage</text>
+  <text x="972" y="335" font-size="11" fill="#201F1D">check tool</text>
+  <text x="972" y="351" font-size="11" fill="#5E5B55">exact EHR names</text>
+
+  <rect x="836" y="384" width="240" height="56" rx="8" fill="#EDECE8" stroke="#5E5B55" stroke-dasharray="5 4"/>
+  <text x="850" y="407" font-size="14" font-weight="700" fill="#201F1D">Match safeguards (code)</text>
+  <text x="850" y="427" font-size="12" fill="#201F1D">auto-match ≥ 0.85, lead ≥ 0.10</text>
+
+  <text x="836" y="468" font-size="11" fill="#5E5B55">Ambiguous match → top 3 for a person.</text>
+  <text x="836" y="484" font-size="11" fill="#5E5B55">EHR stays unknown unless named.</text>
+  <text x="836" y="500" font-size="11" fill="#5E5B55">Graph uses the points scorer today.</text>
+
+  <g fill="none" stroke="#5E5B55" stroke-width="1.3" stroke-dasharray="4 3">
+    <path d="M956 180V204" marker-end="url(#a)"/>
+    <path d="M893 270V294" marker-end="url(#a)"/>
+    <path d="M1019 270V294" marker-end="url(#a)"/>
+    <path d="M893 360V384" marker-end="url(#a)"/>
+  </g>
+
+  <!-- PLANNED -->
+  <rect x="816" y="540" width="280" height="98" rx="10" fill="none" stroke="#5E5B55" stroke-width="1.5" stroke-dasharray="2 4"/>
+  <text x="832" y="562" font-size="12" font-weight="700" fill="#5E5B55" letter-spacing="1">PLANNED</text>
+  <text x="832" y="582" font-size="12" fill="#201F1D">Ingest-time patient-data scrubber</text>
+  <text x="832" y="599" font-size="12" fill="#201F1D">One-line Claude intent summary</text>
+  <text x="832" y="616" font-size="12" fill="#201F1D">Retraining on SDR decisions</text>
+  <text x="832" y="633" font-size="12" fill="#201F1D">Claude ranking row in the benchmark</text>
+
+  <rect x="816" y="654" width="280" height="56" rx="8" fill="none" stroke="#5E5B55" stroke-dasharray="6 5"/>
+  <text x="830" y="676" font-size="13" font-weight="700" fill="#201F1D">Evaluation harness (code, offline)</text>
+  <text x="830" y="695" font-size="11" fill="#201F1D">persona simulator, NPI match sweep, benchmark</text>
+
+  <!-- legend -->
+  <g font-size="12" fill="#201F1D">
+    <rect x="24" y="726" width="16" height="16" rx="3" fill="#EDECE8" stroke="#5E5B55"/><text x="46" y="739">Code / rules</text>
+    <rect x="150" y="726" width="16" height="16" rx="3" fill="#201F1D"/><text x="172" y="739">Trained ML model</text>
+    <rect x="304" y="726" width="16" height="16" rx="3" fill="#F6EBD9" stroke="#B68235" stroke-width="1.5"/><text x="326" y="739">Claude (LLM)</text>
+    <rect x="432" y="726" width="16" height="16" rx="3" fill="#E0EEE3" stroke="#2D6A3E" stroke-width="1.5"/><text x="454" y="739">Person</text>
+  </g>
+</svg>
