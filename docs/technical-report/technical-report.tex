@@ -87,7 +87,7 @@ LeadFinder runs one lead through nine steps in a fixed order, and only three of 
 \label{fig:workflow}
 \end{figure}
 
-Two choices in Figure~\ref{fig:workflow} carry most of the reliability argument. First, orchestration is a fixed graph rather than an LLM supervisor, following the graph pattern from the course,\footnote{ENMGT 5405/4405, Week~6 lecture, ``Emotions and Multi Agents,'' slides ``Graph Multi Agent Pattern'': a deterministic directed graph in which nodes are agents or code, state is global and edges are conditional traversals. LangGraph, the course's framework for this pattern, is covered in the Week~7 lecture, ``LangGraph.''} since the order of steps never changes and a supervisor would add a point of failure without adding judgment. Second, the only loops are bounded: the research agent stops after 10 tool calls, and a draft that fails its checks is rewritten at most twice before it goes to a person, so a lead can neither cycle indefinitely nor be sent without an approval. The intent gate also has two exits besides research. A visitor with real intent whose practice cannot be identified goes to an SDR identity-review queue instead of being dropped, and low-intent traffic stops with a logged reason.
+Two choices in Figure~\ref{fig:workflow} carry most of the reliability argument. First, orchestration is a fixed graph rather than an LLM supervisor, following the graph pattern from the course,\footnote{ENMGT 5405/4405, Week~6 lecture, ``Emotions and Multi Agents,'' slides ``Graph Multi Agent Pattern'': a deterministic directed graph in which nodes are agents or code, state is global and edges are conditional traversals. LangGraph, the course's framework for this pattern, is covered in the Week~7 lecture, ``LangGraph.''} since the order of steps never changes and a supervisor would add a point of failure without adding judgment. Second, the only loops are bounded: the research agent stops after 10 tool calls,\footnote{The cap sits at the top of the range the course gives for a single agent: ENMGT 5405/4405, Week~7 lecture, ``LangGraph,'' slide ``Deep Agents'' (a classic ReAct agent is ``genuinely good at relatively simple tasks'' at ``3 to 10 tool calls per run''). The Week~4 lecture, ``AI Agents,'' shows the same default of 10 turns in OpenAI's agent SDK.} and a draft that fails its checks is rewritten at most twice before it goes to a person, so a lead can neither cycle indefinitely nor be sent without an approval. The intent gate also has two exits besides research. A visitor with real intent whose practice cannot be identified goes to an SDR identity-review queue instead of being dropped, and low-intent traffic stops with a logged reason.
 
 \begin{figure}[htbp]
 \centering
@@ -146,7 +146,7 @@ The case the original plan missed was a visitor with clear buying intent whose p
 
 \subsection{Practice data and the research agent}
 
-The National Provider Identifier registry lists who is licensed to provide care, but not what software a practice runs or where its website is, so the data work is split between a bulk table built ahead of time and an agent that works one lead at a time. The table holds 742 independent practices across 10 cities, pulled from the public registry with duplicate NPIs of one business merged, provider counts estimated, provenance recorded and stable NPI-based identifiers. The research agent is a Claude tool-use loop with two tools, a directory lookup over that table and a homepage check that fetches a candidate's HTTPS homepage and extracts only exact, recognized EHR names.
+The National Provider Identifier registry lists who is licensed to provide care, but not what software a practice runs or where its website is, so the data work is split between a bulk table built ahead of time and an agent that works one lead at a time. The table holds 742 independent practices across 10 cities, pulled from the public registry with duplicate NPIs of one business merged, provider counts estimated, provenance recorded and stable NPI-based identifiers. The research agent is a Claude tool-use loop with two tools,\footnote{Within the course's guidance to keep each agent's toolset small: ENMGT 5405/4405, Week~4 lecture, ``AI Agents,'' slide ``Connect Tools, APIs'' (``3--5 tools recommended,'' citing the risk of context pollution); the Week~7 quiz notes that selection accuracy degrades as tools are added.} a directory lookup over that table and a homepage check that fetches a candidate's HTTPS homepage and extracts only exact, recognized EHR names.
 
 The agent's safeguards are code that the model cannot override, which is what makes an agent acceptable at this step. A candidate is matched automatically only with a score of at least 0.85 and a lead of at least 0.10 over the runner-up; an ambiguous case returns the top three candidates for a person to choose from; an EHR stays unknown unless the practice's own site names it; and the agent cannot introduce a practice that the directory did not return.
 
@@ -339,14 +339,14 @@ demo-v6 & 5,600 & 77.9\% & 0.810 & 0.656 & 1.7 pts & Live \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.7\textwidth]{demo-scoring-model.png}
-\caption{Demo, scoring model page: the benchmark, every version against the live one, and the scorecard's decision on each.}
-\end{figure}
-
 \section{Reproducing the results}
 
 {\sloppy The demo screenshots were taken from a fresh local database with the template writer, following the run instructions in the repository's README. The test suite runs with \code{python -m pytest -q}. The gate, taxonomy and matching evaluation is produced by \code{python -m leadfinder.evaluation --n 2000 --seed 42}, which writes \code{docs/evaluation-report.md}, and matching on real NPI names by \code{python -m leadfinder.evaluation.npi\_match --seed 42}, which writes \code{docs/npi-match-report.md}. The charts are drawn by \code{docs/report-assets/make\_charts.py}, and the architecture and workflow diagrams are hand-written SVG files in the same folder. This report is typeset from \code{docs/technical-report/technical-report.tex} with \code{tectonic}.\par}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.4\textwidth]{demo-scoring-model.png}
+\caption{Demo, scoring model page: the benchmark, every version against the live one, and the scorecard's decision on each.}
+\end{figure}
 
 \end{document}
