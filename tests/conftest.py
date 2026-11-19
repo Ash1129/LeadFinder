@@ -7,12 +7,13 @@ from fastapi.testclient import TestClient
 
 from leadfinder import auth
 from leadfinder.service.app import create_app
+from leadfinder.service.mailer import Mailer
 from leadfinder.writer import Claude, Offline
 
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app(tmp_path / "test.db", demo=True, writer=Offline())
+    return create_app(tmp_path / "test.db", demo=True, writer=Offline(), mailer=Mailer())      # no mailbox: nothing can send
 
 
 class FakeAnthropic:
@@ -41,7 +42,7 @@ def fake():
 
 @pytest.fixture
 def claude_app(tmp_path, fake):
-    return create_app(tmp_path / "claude.db", demo=True, writer=Claude(client=fake))
+    return create_app(tmp_path / "claude.db", demo=True, writer=Claude(client=fake), mailer=Mailer())
 
 
 @pytest.fixture

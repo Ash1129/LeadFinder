@@ -27,7 +27,7 @@
 <header class="ov-head">
   <p class="kicker">Overview · {{ now|when }} UTC<sup class="fn"><a href="#fn-data" aria-label="footnote 1">1</a></sup></p>
   <h1 class="title">{{ counts.new }} lead{{ 's' if counts.new != 1 }} waiting for review{% if counts.new %}, {{ hot }} of them hot{% endif %}</h1>
-  <p class="muted">Independent practices, ranked by a model trained on their NPI-style record and their visits to the site · an email is written only when an SDR asks for it, and nothing is sent</p>
+  <p class="muted">Independent practices, ranked by a model trained on their NPI-style record and their visits to the site · an email is written only when an SDR asks for it, and {{ 'an approved one goes only to a test mailbox' if mail.configured else 'nothing is sent' }}</p>
 </header>
 
 <hr class="rule">

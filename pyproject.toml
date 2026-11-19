@@ -23,7 +23,7 @@ dependencies = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-leadfinder = ["service/templates/*.html", "service/static/*.js"]
+leadfinder = ["service/templates/*.html", "service/static/*.js", "service/static/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

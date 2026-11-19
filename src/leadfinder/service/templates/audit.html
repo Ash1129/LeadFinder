@@ -11,9 +11,11 @@
 {% endblock %}
 {% block body %}
 {%- set approved = rows|selectattr('action', 'equalto', 'approved')|list -%}
+{%- set rejected = rows|selectattr('action', 'equalto', 'rejected')|list -%}
+{%- set sent = rows|selectattr('action', 'equalto', 'sent')|list -%}
 <header class="au-head">
   <p class="kicker">Audit log · the latest {{ rows|length }}</p>
-  <h1 class="title">{{ approved|length }} approved, {{ rows|length - approved|length }} rejected</h1>
+  <h1 class="title">{{ approved|length }} approved, {{ rejected|length }} rejected{% if sent %}, {{ sent|length }} sent{% endif %}</h1>
   <p class="muted">Every decision with who made it and the chance and points that were on their screen</p>
 </header>
 
@@ -30,7 +32,7 @@
         <td><span class="badge {{ a.action }}">{{ a.action }}</span></td>
         <td class="r num" data-v="{{ a.chance if a.chance is not none else '' }}">{% if a.chance is not none %}{{ (a.chance * 100)|round|int }}%{% endif %}</td>
         <td class="r num">{{ a.score }}</td>
-        <td class="small">{% if a.action == 'rejected' %}{{ reject_reasons.get(a.reason, a.reason)|capitalize }}{% if a.note %} · “{{ a.note }}”{% endif %}{% else %}{{ 'Edited before approving' if a.edited else 'Approved as drafted' }}{% if a.written_by %} · written by {{ 'Claude' if a.written_by == 'claude' else 'the template' }}{% endif %}{% endif %}</td>
+        <td class="small">{% if a.action == 'rejected' %}{{ reject_reasons.get(a.reason, a.reason)|capitalize }}{% if a.note %} · “{{ a.note }}”{% endif %}{% elif a.action == 'sent' %}Branded email sent {{ a.note }}{% else %}{{ 'Edited before approving' if a.edited else 'Approved as drafted' }}{% if a.written_by %} · written by {{ 'Claude' if a.written_by == 'claude' else 'the template' }}{% endif %}{% endif %}</td>
       </tr>{% endfor %}</tbody>
     </table>
   </div>

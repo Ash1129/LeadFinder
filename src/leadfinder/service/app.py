@@ -18,6 +18,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import smtplib
 import sqlite3
 import time
 from datetime import datetime, timezone
@@ -35,6 +36,8 @@ from ..seed import apply_model, process_local_visit_handoff, seed, seed_demo_rev
 from ..visit_analysis import PageView, VisitAnalysisInput, analyze_visits
 from ..writer import Writer, WriterError, make_writer
 from . import security
+from .email_html import BRAND, LOGO_CID, LOGO_FILE, LOGO_URL, branded
+from .mailer import Mailer, SignInRefused
 from .security import SESSION_COOKIE, THEME_COOKIE, clear_session_cookie, lead_token, safe_next, set_session_cookie
 
 HERE = Path(__file__).resolve().parent
@@ -89,6 +92,9 @@ def review_token(row) -> str:
 
 TEMPLATES.env.filters["when"] = when
 TEMPLATES.env.filters["ago"] = ago
+# an approved email as it is sent: the lead page shows it (the logo from /assets/), and Send sends it (the logo inside)
+TEMPLATES.env.globals["email_html"] = lambda body, sender="": branded(body, sender, logo=LOGO_URL)
+TEMPLATES.env.globals["email_brand"] = BRAND
 
 
 def why(row) -> dict:
@@ -99,12 +105,15 @@ def why(row) -> dict:
     return d
 
 
-def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional[Writer] = None) -> FastAPI:
+def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional[Writer] = None,
+               mailer: Optional[Mailer] = None) -> FastAPI:
     """`demo`: on an empty database, fill it with synthetic practices and the demo logins. None reads
     LEADFINDER_DEMO (on unless set to 0). `writer`: who writes emails and call briefs on request; None picks Claude
-    when a credential is set and the templates otherwise (writer.make_writer)."""
+    when a credential is set and the templates otherwise (writer.make_writer). `mailer`: what sends an approved
+    email; None reads LEADFINDER_SMTP_* (mailer.py), and with none of those set nothing sends."""
     conn = connect(db_path)
     writer = writer or make_writer()
+    mailer = mailer or Mailer.from_env()
     ml.ensure(conn)                     # the trained scorer: fitted on first start (a few seconds), then read from the database
     demo_mode = demo if demo is not None else os.environ.get("LEADFINDER_DEMO", "1") != "0"
     if demo_mode:
@@ -119,6 +128,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
     app.middleware("http")(security.guard)        # host and origin checks, security headers (runs first)
     app.state.conn = conn
     app.state.writer = writer
+    app.state.mailer = mailer
 
     def theme(request: Request) -> str:
         return request.cookies.get(THEME_COOKIE, "system")
@@ -140,7 +150,7 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
             "SELECT COUNT(*) n FROM visit_analyses WHERE routing_decision='human_review' AND review_status='pending'"
         ).fetchone()["n"]
         return {"request": request, "me": me, "can": {p: me.can(p) for p in auth.PERMISSIONS}, "theme": theme(request),
-                "nav": "", "new_count": new, "review_count": review_count, "writer": writer, "model": ml.load(conn), **kw}
+                "nav": "", "new_count": new, "review_count": review_count, "writer": writer, "mail": mailer, "model": ml.load(conn), **kw}
 
     def allow(request: Request, permission: str) -> auth.Principal:
         me = request.state.me
@@ -178,7 +188,8 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         base = dict(nav="leads", d=d, visits=visits, history=history, drafted=drafted,
                     problems=outreach.check(d["subject"], d["body"]) if drafted else [],
                     token=lead_token(conn, d["id"]), reject_reasons=REJECT_REASONS, stale=False, done="", wrote="",
-                    write_error="", blocked=False, now=time.time())
+                    write_error="", blocked=False, now=time.time(),
+                    sent=next((h for h in history if h["action"] == "sent"), None), send_error="")
         return TEMPLATES.TemplateResponse(request, "lead.html", ctx(request, **(base | kw)), status_code=status_code)
 
     def review_row(review_id: int):
@@ -567,6 +578,33 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         edited = subject != d["subject"] or body != d["body"]
         return decide(request, lead_id, seen, "approved", subject=subject, body=body, edited=edited)
 
+    @app.post("/lead/{lead_id}/send")
+    def send(request: Request, lead_id: int):
+        """Send the approved email, branded (email_html.py), over SMTP (mailer.py), with the SDR's name on it. Only
+        an approved email goes, once, and only to the test mailbox: the subject says which practice it was for.
+        The send is logged beside the approval."""
+        me = allow(request, "act_on_leads")
+        d = lead_row(lead_id)
+        if not mailer.configured:
+            raise HTTPException(409, "sending is not set up")
+        if d["status"] != "approved" or not d["body"]:
+            raise HTTPException(409, "only an approved email can be sent")
+        if conn.execute("SELECT 1 FROM audit WHERE lead_id=? AND action='sent'", (lead_id,)).fetchone():
+            return RedirectResponse(f"/lead/{lead_id}", status_code=303)        # sent already: the page says when and where
+        problems = outreach.check(d["subject"], d["body"])                    # what was approved passed these; a changed rule may not
+        if problems:
+            return lead_page(request, d, status_code=422, send_error=f"The guardrail stopped it: {'; '.join(problems)}.")
+        try:
+            out = mailer.send(d["contact_email"] or d["name"], d["subject"], d["body"], branded(d["body"], me.name), me.name,
+                              images={LOGO_CID: LOGO_FILE.read_bytes()})
+        except (SignInRefused, smtplib.SMTPException, OSError) as e:
+            return lead_page(request, d, status_code=502, send_error=f"{str(e)[:300]}. Nothing went out.")
+        conn.execute("INSERT INTO audit(lead_id, username, action, note, score, reasons, subject, body, edited, at, written_by, chance, "
+                     "model_version) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (lead_id, me.username, "sent", f"to {out['to']}", d["score"], json.dumps(d["reasons"]), d["subject"], d["body"], 0,
+                      time.time(), d["written_by"], d["chance"], d["model_version"]))
+        return RedirectResponse(f"/lead/{lead_id}?done=sent", status_code=303)
+
     @app.post("/lead/{lead_id}/reject")
     def reject(request: Request, lead_id: int, reason: str = Form(...), note: str = Form(""), seen: str = Form("")):
         allow(request, "act_on_leads")
@@ -598,6 +636,11 @@ def create_app(db_path=DEFAULT_DB, demo: Optional[bool] = None, writer: Optional
         r = RedirectResponse(safe_next(next), status_code=303)
         r.set_cookie(THEME_COOKIE, theme if theme in ("light", "dark") else "system", max_age=365 * 24 * 3600, samesite="lax")
         return r
+
+    @app.get(LOGO_URL)
+    def logo():
+        """The seller's logo, for the lead page's picture of the email (email_html.py)."""
+        return FileResponse(LOGO_FILE, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
     @app.get("/assets/app.js")
     def app_js():

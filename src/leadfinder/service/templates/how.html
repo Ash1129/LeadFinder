@@ -41,7 +41,7 @@
 <header class="hw-head">
   <p class="kicker">How it works</p>
   <h1 class="title">Code finds and ranks the practices; a person asks for each email and approves it</h1>
-  <p class="muted">Submitted visits pass an intent gate before practice matching; the existing demo leads show the downstream scoring and review steps · nothing is sent from here<sup class="fn"><a href="#fn-send" aria-label="footnote 1">1</a></sup></p>
+  <p class="muted">Submitted visits pass an intent gate before practice matching; the existing demo leads show the downstream scoring and review steps · {{ 'an approved email goes only to a test mailbox' if mail.configured else 'nothing is sent from here' }}<sup class="fn"><a href="#fn-send" aria-label="footnote 1">1</a></sup></p>
 </header>
 
 <hr class="rule">
@@ -145,7 +145,7 @@
         <g class="wf-node wf-human">
           <rect x="385" y="925" width="230" height="65"></rect>
           <text class="wf-title" x="500" y="953" text-anchor="middle">SDR approves or rejects</text>
-          <text class="wf-sub" x="500" y="975" text-anchor="middle">logged; nothing is sent</text>
+          <text class="wf-sub" x="500" y="975" text-anchor="middle">{{ 'logged; sent to a test mailbox' if mail.configured else 'logged; nothing is sent' }}</text>
         </g>
       </svg>
       <figcaption class="wf-caption">This is the path implemented in the app. The ResearchAgent is not part of this current path. Seeded synthetic leads start with identity already linked and bypass the visit gate.</figcaption>
@@ -342,7 +342,7 @@
         <tr><td>The model's training</td><td>A simulated history of won and lost leads, a new version each simulated month, a scorecard deciding which is live</td><td>Retrained on what SDRs approved and rejected, through the same scorecard</td></tr>
         <tr><td>The benchmark</td><td>The model, the points table and a second model, on the same held-out leads</td><td>Claude's own ranking of those leads, as a fourth row</td></tr>
         <tr><td>Writing</td><td>{{ 'Claude, on request, checked by code' if writer.is_model else 'A template, on request; Claude once a credential is set' }}</td><td>The same</td></tr>
-        <tr><td>Sending</td><td>Off: an approval marks the email ready to send</td><td>A person's mail tool sends what was approved</td></tr>
+        <tr><td>Sending</td><td>{{ 'To a test mailbox only: an SDR sends an approved email, branded, and it never goes to the practice' if mail.configured else 'Off: an approval marks the email ready to send' }}</td><td>{{ 'Sent to the practice once outreach is agreed' if mail.configured else "A person's mail tool sends what was approved" }}</td></tr>
       </tbody>
     </table>
   </div>
@@ -350,7 +350,7 @@
 
 <footer class="footnote">
   <ol class="fnotes">
-    <li id="fn-send">This service has no way to send mail. An approved email is marked ready to send and stays on the lead's page.</li>
+    <li id="fn-send">{% if mail.configured %}An SDR can send an approved email from its lead's page. It goes from {{ mail.sender }} to the test mailbox {{ mail.test_to }}, branded, with the practice named in the subject; no email goes to a practice.{% else %}This service has no way to send mail. An approved email is marked ready to send and stays on the lead's page.{% endif %}</li>
     <li id="fn-npi">Synthetic: each practice is made up, its NPI is a random number with a valid check digit, and its address uses the reserved .example domain. Only a business contact is kept.</li>
     <li id="fn-sim">The outcomes the model learned from are drawn from a rule the simulator keeps to itself. The percentages rank leads against each other; none is a forecast of real conversion.</li>
   </ol>

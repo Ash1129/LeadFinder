@@ -4,7 +4,7 @@ An AI lead finder for health-tech sales to independent medical practices. Websit
 record go into a trained model that gives each practice a chance of converting, with what moved that chance shown
 line by line, and into a hand-set points table kept beside it for comparison. Each lead has a call brief, and no
 email until an SDR asks for one with a button; it is then written from public business facts only, and the SDR
-approves, edits or rejects it, with every decision logged. The How it works page walks through the five steps. Nothing is sent from the app; an approval marks the email ready to send.
+approves, edits or rejects it, with every decision logged. The How it works page walks through the five steps. An approval marks the email ready to send; nothing is sent unless a test mailbox is set up (below), and then only to that mailbox.
 
 Leads are ranked by the trained model, a logistic regression (`src/leadfinder/ml.py`). There are no real sales
 outcomes yet, so it learns from a simulated history (`src/leadfinder/synth.py`): 8,000 made-up past leads, each won
@@ -141,6 +141,20 @@ that table from the public registry; see [docs/npi-data.md](./docs/npi-data.md).
 To have Claude write the emails and call briefs, put `ANTHROPIC_API_KEY=...` in a `.env` file beside `asgi.py`
 (it is gitignored; `.env.example` lists every setting) and restart. The tests never call the API.
 
+To send approved emails, add a mailbox and a test address to the same `.env` and restart:
+
+```
+LEADFINDER_SMTP_USER=you@gmail.com
+LEADFINDER_SMTP_PASS=                 # a Gmail app password (2-step verification on)
+LEADFINDER_SMTP_TEST_TO=you@gmail.com
+```
+
+An approved lead's page then has a **Send it to the test mailbox** button and shows the email as it goes: the
+approved words under the seller's header and logo (`service/email_html.py`), with the postal address and the opt-out
+below. It is sent over SMTP (`service/mailer.py`) with the SDR's name on the From line, once, and logged in the
+audit log. Every email goes to `LEADFINDER_SMTP_TEST_TO`, never to the practice: the subject says who it was for.
+Sending to practices is not built; the tests never open a connection.
+
 The first start fits six versions of the model, one for each simulated month of history, and a scorecard decides
 which is live (the Scoring model page shows all six side by side with the decision on each). To add a month, fit the
 next version and put it to the scorecard:
@@ -174,7 +188,7 @@ next version and put it to the scorecard:
 | `src/leadfinder/evaluation/npi_match.py` | practice matching on the real NPI table and the cutoff sweep (writes `docs/npi-match-report.md`) |
 | `src/leadfinder/evaluation/` | persona visit simulator with separate ground truth; evaluation of the gate, page taxonomy and practice matching (`python -m leadfinder.evaluation` writes `docs/evaluation-report.md`) |
 | `src/leadfinder/auth.py` | accounts, roles (SDR, sales manager), scrypt passwords, sessions |
-| `src/leadfinder/service/` | the app, the security middleware and headers, the templates, `static/app.js` |
+| `src/leadfinder/service/` | the app, the security middleware and headers, the templates, `static/app.js`, the branded email (`email_html.py`) and the SMTP sender (`mailer.py`) |
 
 ## Not built yet (from the proposal)
 

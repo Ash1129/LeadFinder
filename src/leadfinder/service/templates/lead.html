@@ -22,6 +22,9 @@
 .reject .field{flex:1 1 220px}
 .byline{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;max-width:760px}
 .byline p{margin:0;flex:1 1 280px}
+.mailview{max-width:760px}.mailview summary{cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--accentInk)}
+.mailframe{border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.mailframe table{width:auto;min-width:0;margin:0;border-collapse:separate}.mailframe td{padding:0;border:0}  /* the page's table rules stay out of the email */
 .brief{display:flex;flex-direction:column;gap:20px;max-width:760px}
 .brief p{margin:0}
 .brief h3{font:600 15px/24px var(--body);margin:0 0 4px}
@@ -40,7 +43,9 @@
 </header>
 
 {% if stale %}<p class="notice warn" role="alert"><b>Not saved.</b> Someone decided this lead while you had it open; what they did is below.</p>{% endif %}
-{% if done == 'approved' %}<p class="notice" role="status"><b>Approved.</b> The email is marked ready to send and the decision is in the audit log. Nothing was sent from here.</p>{% endif %}
+{% if done == 'approved' %}<p class="notice" role="status"><b>Approved.</b> The email is marked ready to send and the decision is in the audit log. {{ 'Nothing has been sent yet: the Send button is under the email.' if mail.configured else 'Nothing was sent from here.' }}</p>{% endif %}
+{% if done == 'sent' and sent %}<p class="notice" role="status"><b>Sent.</b> The branded email went {{ sent.note }} from {{ mail.sender }}, and the send is in the audit log. It did not go to the practice.</p>{% endif %}
+{% if send_error %}<p class="notice warn" role="alert"><b>Not sent.</b> {{ send_error }}</p>{% endif %}
 {% if done == 'rejected' %}<p class="notice" role="status"><b>Rejected.</b> The reason is in the audit log, where it counts against the weights that put this lead up.</p>{% endif %}
 {% if wrote %}<p class="notice" role="status"><b>{{ 'Written by Claude.' if writer.is_model else 'Written.' }}</b> The {{ 'email' if wrote == 'email' else 'call brief' }} below is new{% if writer.is_model %}; it passed the checks, and it is still yours to read before you use it{% endif %}.</p>{% endif %}
 {% if write_error %}<p class="notice warn" role="alert"><b>Not written.</b> {{ write_error }}</p>{% endif %}
@@ -84,7 +89,7 @@
     </section>
 
     <section class="sec">
-      <h2 id="ld-draft" class="kicker">The first email · {% if d.status == 'approved' %}approved{% elif d.status == 'rejected' %}{{ 'not sent: rejected' if drafted else 'none written: rejected' }}{% else %}{{ 'drafted, waiting for you' if drafted else 'not written yet' }}{% endif %}{% call note('draft-note', 'What the guardrail checks') %}<span class="ln">Before an approval lands, the words are checked: no patient information, no claims the seller cannot back (a guarantee, "HIPAA certified"), and the footer with the postal address and the opt-out still there (CAN-SPAM).</span><span class="ln">It goes to the practice's business address only.</span><span class="ln">{% if writer.is_model %}Claude sees the practice's public record, its visits and the score's reasons, nothing else. Its draft is kept only if it passes the same checks and names no EHR or provider count that is not on the record; the footer is added by code.{% else %}No Claude credential is set, so the email is filled in from a template. Set ANTHROPIC_API_KEY and restart to have Claude write it.{% endif %}</span>{% endcall %}</h2>
+      <h2 id="ld-draft" class="kicker">The first email · {% if d.status == 'approved' %}{{ 'approved and sent' if sent else 'approved' }}{% elif d.status == 'rejected' %}{{ 'not sent: rejected' if drafted else 'none written: rejected' }}{% else %}{{ 'drafted, waiting for you' if drafted else 'not written yet' }}{% endif %}{% call note('draft-note', 'What the guardrail checks') %}<span class="ln">Before an approval lands, the words are checked: no patient information, no claims the seller cannot back (a guarantee, "HIPAA certified"), and the footer with the postal address and the opt-out still there (CAN-SPAM).</span><span class="ln">It goes to the practice's business address only.</span><span class="ln">{% if writer.is_model %}Claude sees the practice's public record, its visits and the score's reasons, nothing else. Its draft is kept only if it passes the same checks and names no EHR or provider count that is not on the record; the footer is added by code.{% else %}No Claude credential is set, so the email is filled in from a template. Set ANTHROPIC_API_KEY and restart to have Claude write it.{% endif %}</span>{% endcall %}</h2>
       {% if d.status == 'new' and can.act_on_leads %}
       {% if drafted %}
       <form class="byline" method="post" action="/lead/{{ d.id }}/write">
@@ -118,6 +123,20 @@
       <p class="small muted">To {{ d.contact_name or "the practice" }} {% if d.contact_email %}&lt;{{ d.contact_email }}&gt;{% else %}(no email on record){% endif %}</p>
       <p><b>{{ d.subject }}</b></p>
       <p class="draft-body">{{ d.body }}</p>
+      {% if d.status == 'approved' and mail.configured %}
+      {% if sent %}
+      <p class="small muted">Sent {{ sent.note }} on {{ sent.at|when }} UTC by {{ sent.who or sent.username }}, from {{ mail.sender }}. It did not go to the practice.</p>
+      {% elif can.act_on_leads %}
+      <form class="byline" method="post" action="/lead/{{ d.id }}/send">
+        <p class="small muted">Sends these words as a branded {{ email_brand }} email from {{ mail.sender }}. It goes to the test mailbox {{ mail.test_to }}, not to the practice; the subject says who it was for.</p>
+        <button class="btn primary" type="submit" data-busy="Sending…">Send it to the test mailbox</button>
+      </form>
+      {% endif %}
+      <details class="mailview">
+        <summary>{{ 'The email as it was sent' if sent else 'The email as it will be sent' }}</summary>
+        <div class="mailframe">{{ email_html(d.body, (sent.who or sent.username) if sent else me.name)|safe }}</div>
+      </details>
+      {% endif %}
       {% else %}
       <p class="muted">No email {{ 'was written for this lead' if d.status != 'new' else 'has been written for this lead yet' }}.</p>
       {% endif %}
