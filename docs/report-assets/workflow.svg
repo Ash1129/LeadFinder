@@ -74,7 +74,7 @@
 
   <text x="24" y="398" font-size="13" fill="#201F1D">Loops are bounded: research stops at 10 tool calls; a flagged draft is redrafted at most twice, then goes to a person.</text>
   <text x="24" y="420" font-size="13" fill="#201F1D">No answer from the SDR leaves the lead paused. Nothing is sent without an approval.</text>
-  <text x="24" y="442" font-size="13" fill="#201F1D">Before any lead arrives, the data agent (code, offline) builds the NPI practice table that step 4 searches and step 5 scores.</text>
+  <text x="24" y="442" font-size="13" fill="#201F1D">Before any lead arrives, offline code builds the NPI practice table that step 4 searches and step 5 scores.</text>
 
   <g font-size="12" fill="#201F1D">
     <rect x="24" y="480" width="16" height="16" rx="3" fill="#EDECE8" stroke="#5E5B55"/><text x="46" y="493">Code / rules</text>

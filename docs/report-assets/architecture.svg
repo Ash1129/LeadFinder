@@ -17,7 +17,7 @@
   <rect x="24" y="210" width="220" height="34" rx="8" fill="#F3F2F0" stroke="#E3E1DC"/>
   <text x="38" y="232" font-size="12" fill="#201F1D">Public NPI registry (NPPES API)</text>
   <rect x="24" y="262" width="220" height="104" rx="8" fill="#EDECE8" stroke="#5E5B55"/>
-  <text x="38" y="286" font-size="14" font-weight="700" fill="#201F1D">Data agent (code, offline)</text>
+  <text x="38" y="286" font-size="14" font-weight="700" fill="#201F1D">Practice table builder (code)</text>
   <text x="38" y="306" font-size="12" fill="#201F1D">builds the practice table:</text>
   <text x="38" y="322" font-size="12" fill="#201F1D">742 independent practices,</text>
   <text x="38" y="338" font-size="12" fill="#201F1D">duplicates merged, sizes estimated</text>
@@ -116,7 +116,7 @@
   <rect x="836" y="294" width="114" height="66" rx="8" fill="#EDECE8" stroke="#5E5B55" stroke-dasharray="5 4"/>
   <text x="846" y="317" font-size="13" font-weight="700" fill="#201F1D">Directory</text>
   <text x="846" y="335" font-size="11" fill="#201F1D">lookup tool</text>
-  <text x="846" y="351" font-size="11" fill="#5E5B55">data agent table</text>
+  <text x="846" y="351" font-size="11" fill="#5E5B55">NPI practice table</text>
   <rect x="962" y="294" width="114" height="66" rx="8" fill="#EDECE8" stroke="#5E5B55" stroke-dasharray="5 4"/>
   <text x="972" y="317" font-size="13" font-weight="700" fill="#201F1D">Homepage</text>
   <text x="972" y="335" font-size="11" fill="#201F1D">check tool</text>
